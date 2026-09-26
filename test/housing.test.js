@@ -20,6 +20,25 @@ const offer = { period: 'day', property: 'Учебный отель', property_t
 const research = { text: excerpt, citations: [{ url: offer.source_url }, { url: 'https://example.com/other' }] };
 const convert = offers => housingMaterials({ offers }, research, stay, now, sourceUrl);
 
+test('tax exclusion and nightly unit retain the exact evidence without invented fee types or repeated guests', () => {
+  const fees_text = 'Price per night (TAX Not included)';
+  const text = 'Учебный объект в Дубае. AED 294. ' + fees_text + '. Отдельное жильё для двух взрослых без детей.';
+  const r = { ...research, text };
+  const candidate = { ...offer, price_text: 'AED 294', price_basis: 'night', total_aed: null,
+    fees_text, all_mandatory_fees_included: false, research_excerpt: text };
+  const result = housingMaterials({ offers: [candidate] }, r, stay, now, sourceUrl);
+  const post = renderPost(result.materials[0], false);
+  assert.equal(post.split(fees_text).length - 1, 1);
+  assert.equal(post.split('2 взрослых').length - 1, 1);
+  assert.match(post, /состав гостей подтверждён источником/);
+  assert.doesNotMatch(post, /Есть дополнительные сборы|сервисные сборы|Указан тариф за ночь/);
+  const forged = housingMaterials({ offers: [{ ...candidate, fees_text: 'All taxes included' }] }, r, stay, now, sourceUrl);
+  assert.equal(forged.materials.length, 0);
+  assert.match(forged.rejected[0].reason, /дословной цитатой/);
+  const withoutQuote = housingMaterials({ offers: [{ ...candidate, fees_text: null }] }, r, stay, now, sourceUrl);
+  assert.match(renderPost(withoutQuote.materials[0], false), /Указан тариф за ночь/);
+});
+
 test('whole studios render as studios, shared studios are rejected, and warnings stay distinct', () => {
   const quote = 'Учебная студия целиком в Дубае. Цена: AED 259. Есть дополнительные сборы, депозит, наличие и число гостей не указаны.';
   const r = { ...research, text: quote };
@@ -31,10 +50,10 @@ test('whole studios render as studios, shared studios are rejected, and warnings
   assert.equal(result.materials.length, 1);
   const text = renderPost(result.materials[0], false);
   assert.match(text, /Дубай · студия целиком/);
-  assert.match(text, /Есть дополнительные сборы/);
+  assert.match(text, /Налоги и сборы включены не полностью/);
   assert.match(text, /Депозит неизвестен/);
   assert.match(text, /Наличие на даты не подтверждено/);
-  assert.match(text, /Цена для 2 взрослых не подтверждена/);
+  assert.match(text, /Применимость тарифа к этому составу гостей не подтверждена/);
   assert.equal(text.split('Итог для запрошенных дат не подтверждён').length - 1, 1);
   assert.equal(text.split('Цена может измениться').length - 1, 1);
   assert.doesNotMatch(text, /нужно проверить|полный итог нужно уточнить|Перед бронированием/);
@@ -175,7 +194,7 @@ test('informational quote preserves from/night and unknowns without computing a 
   assert.match(text, /от 150 AED за ночь/);
   assert.match(text, /Депозит неизвестен/);
   assert.match(text, /Наличие на даты не подтверждено/);
-  assert.match(text, /Цена для 2 взрослых не подтверждена/);
+  assert.match(text, /Применимость тарифа к этому составу гостей не подтверждена/);
   assert.doesNotMatch(text, /самая низкая|самый дешёвый|4650|4500/);
 });
 test('partial offers never enter full-price ranking or inflate comparison count', () => {
