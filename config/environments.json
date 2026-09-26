@@ -1,0 +1,18 @@
+{
+  "test": {
+    "branch": "develop",
+    "description": "Закрытый тестовый Telegram-чат",
+    "data_directory": "data/test",
+    "telegram_chat_id_env": "TEST_TELEGRAM_CHAT_ID",
+    "secret_prefix": "TEST",
+    "delivery_enabled": false
+  },
+  "production": {
+    "branch": "main",
+    "description": "Рабочий Telegram-чат",
+    "data_directory": "data/production",
+    "telegram_chat_id_env": "PRODUCTION_TELEGRAM_CHAT_ID",
+    "secret_prefix": "PRODUCTION",
+    "delivery_enabled": false
+  }
+}
