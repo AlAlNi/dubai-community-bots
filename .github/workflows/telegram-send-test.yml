@@ -1,0 +1,74 @@
+name: Telegram send housing (test)
+on:
+  workflow_dispatch:
+    inputs:
+      search_run_id:
+        description: 'ID успешного запуска Search Dubai (test), число из URL /actions/runs/...'
+        required: true
+        type: string
+      draft_id:
+        description: 'ID выбранной карточки из drafts.md или material.id в report.json'
+        required: true
+        type: string
+      confirm_reviewed:
+        description: 'Я проверил текст, источник и условия этой карточки и разрешаю отправить её в тестовую группу'
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: dubai-telegram-test
+  cancel-in-progress: false
+jobs:
+  send:
+    if: github.ref == 'refs/heads/develop' && inputs.confirm_reviewed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run offline tests
+        run: node --test
+      - name: Validate source run and artifact
+        id: source
+        uses: actions/github-script@v7
+        env:
+          SOURCE_RUN: ${{ inputs.search_run_id }}
+        with:
+          script: |
+            const id = process.env.SOURCE_RUN;
+            if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))) throw new Error('Invalid source run ID');
+            const {data: run} = await github.rest.actions.getWorkflowRun({...context.repo, run_id: Number(id)});
+            if (run.head_branch !== 'develop' || run.event !== 'workflow_dispatch' || run.conclusion !== 'success'
+                || run.path !== '.github/workflows/search-test.yml'
+                || run.head_repository?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              throw new Error('Use a successful Search Dubai (test) run from develop in this repository');
+            }
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {...context.repo, run_id: Number(id)});
+            const matches = artifacts.filter(a => a.name === `dubai-search-test-${run.run_number}` && !a.expired);
+            if (matches.length !== 1) throw new Error('Expected one available search artifact');
+            core.setOutput('artifact_id', String(matches[0].id));
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.source.outputs.artifact_id }}
+          merge-multiple: true
+          path: incoming
+          run-id: ${{ inputs.search_run_id }}
+          github-token: ${{ github.token }}
+      - name: Send exactly one approved housing draft
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TEST_TELEGRAM_HOUSING_BOT_TOKEN: ${{ secrets.TEST_TELEGRAM_HOUSING_BOT_TOKEN }}
+          TEST_TELEGRAM_CHAT_ID: ${{ secrets.TEST_TELEGRAM_CHAT_ID }}
+          DRAFT_ID: ${{ inputs.draft_id }}
+          CONFIRM_REVIEWED: ${{ inputs.confirm_reviewed }}
+        run: node src/telegram-send-cli.js

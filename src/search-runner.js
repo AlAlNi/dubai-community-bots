@@ -87,7 +87,7 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
       const preview = ['# Черновики для проверки', '', `Подготовлено: ${now}. Отправка в Telegram отключена.`, '',
         ...(report.housing_search ? report.housing_search.periods.map(p => `Жильё ${p.period}: ${p.check_in} — ${p.check_out}, ${p.nights} ночей; сравнимых ${p.count}, информационных ${p.informational_count ?? 0}; ${p.status}.`) : []), '',
         ...report.drafts.filter(d => d.status !== 'expired').flatMap(d => [`## ${d.role} — ${d.status}`, '',
-          d.review_note ?? 'Требуется проверка редактором.', `Редактура: ${d.style?.status ?? 'disabled'}.`, '',
+          `ID карточки: ${d.material.id}`, d.review_note ?? 'Требуется проверка редактором.', `Редактура: ${d.style?.status ?? 'disabled'}.`, '',
           ...(d.status === 'blocked' ? [`Заблокировано: ${d.review_reason}. Подробности — в report.json. Исходник не готов к публикации.`]
             : ['### Текст поста', '', d.text]), '', '---', ''])];
       await writeText(resolve(directory, 'drafts.md'), preview.join('\n'));
