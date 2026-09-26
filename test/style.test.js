@@ -139,3 +139,15 @@ test('deduplication preserves end time, negative values and distinct numeric pun
   const output = renderPost(material, false, body);
   for (const line of body.split('\n')) assert.ok(output.includes(line));
 });
+
+test('verifier receives search metadata independently of unknown provider occupancy', () => {
+  const m = { ...material, role: 'housing', housing: { mode: 'informational', adults: null,
+    requested_check_in: '2026-10-01', requested_check_out: '2026-11-01' } };
+  const req = verificationRequest(m, 'Искали для 2 взрослых.', settings);
+  const input = JSON.parse(req.input);
+  assert.equal(input.application_context.found_at, material.checked_at);
+  assert.equal(input.application_context.housing_search.adults, 2);
+  assert.equal(input.application_context.housing_search.check_in, '2026-10-01');
+  assert.equal(input.source.housing.adults, null);
+  assert.match(req.instructions, /такие утверждения всё равно требуют evidence/);
+});

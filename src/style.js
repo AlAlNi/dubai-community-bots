@@ -52,9 +52,13 @@ non_redundant=true только если каждый факт сообщает�
 Для полноты housing в посте нужны сведения выбранного предложения и оговорки. Остальные предложения comparison служат проверке сравнения; перечислять их все в посте не требуется.
 Открытие дверей, начало шоу и окончание — разные факты, даже если часы совпадают. «Двери в 17:00» и отдельный блок «27 сентября, 18:00» не повтор: первое сообщает открытие дверей, второе — начало. Не считай сам факт наличия нескольких времён повтором.
 Факты можно перенести в заголовок или блок даты/места/условий без повторения. Служебные статусы проверки не являются фактами для публикации.
+application_context содержит служебные данные приложения: время поиска found_at и запрошенные даты/гостей housing_search. Фразы «Найдено: ...» и «Искали ... для 2 взрослых» проверяй по application_context, а не по странице источника. Для них не нужна цитата сайта. Это не подтверждает цену для этих гостей или наличие: такие утверждения всё равно требуют evidence. Изменение времени или параметров относительно application_context — ошибка.
 Если есть сомнения, ставь false. issues содержит краткие причины; при полном соответствии issues=[].
 Эта проверка не подтверждает истинность самого source.`,
-    input: JSON.stringify({ source: { title: material.title, facts: material.facts, event_at: material.event_at ?? null,
+    input: JSON.stringify({ application_context: { found_at: material.checked_at,
+      housing_search: material.housing ? { adults: 2, children: 0, units: 1,
+        check_in: material.housing.requested_check_in, check_out: material.housing.requested_check_out } : null },
+      source: { title: material.title, facts: material.facts, event_at: material.event_at ?? null,
       location: material.location ?? null, conditions: material.conditions ?? null, housing: material.housing ?? null, evidence: material.evidence ?? [], source_name: material.source_name, source_url: material.source_url }, candidate }),
     text: { format: { type: 'json_schema', name: 'style_verdict', strict: true,
       schema: { type: 'object', additionalProperties: false, required: ['source_consistent', 'supported', 'complete', 'non_redundant', 'issues'],
