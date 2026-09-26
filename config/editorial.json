@@ -1,5 +1,6 @@
 {
-  "status": "proposal",
+  "status": "prototype",
+  "max_source_age_hours": 48,
   "language": "ru",
   "timezone": "Asia/Dubai",
   "platform": "telegram",
