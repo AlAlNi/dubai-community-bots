@@ -20,6 +20,27 @@ const offer = { period: 'day', property: 'Учебный отель', property_t
 const research = { text: excerpt, citations: [{ url: offer.source_url }, { url: 'https://example.com/other' }] };
 const convert = offers => housingMaterials({ offers }, research, stay, now, sourceUrl);
 
+test('a quoted three-night total cannot become a one-night offer even with confirmed dates', () => {
+  for (const price_text of ['US$4,024.81 × 3 nights US$12,074.43', 'Цена за 3 ночи: 900 AED', 'Цена за 3 ночей: 900 AED']) {
+    const r = { ...research, text: excerpt + '\n' + price_text };
+    const result = housingMaterials({ offers: [{ ...offer, price_text, research_excerpt: r.text }] }, r, stay, now, sourceUrl);
+    assert.equal(result.materials.length, 0);
+    assert.match(result.rejected[0].reason, /другому числу ночей/);
+  }
+  const price_text = 'Total for 1 night: 200 AED';
+  const r = { ...research, text: excerpt + '\n' + price_text };
+  assert.equal(housingMaterials({ offers: [{ ...offer, price_text, research_excerpt: r.text }] }, r, stay, now, sourceUrl).materials.length, 1);
+});
+
+test('informational card identifies private accommodation and does not assert confirmed price dates', () => {
+  const m = convert([{ ...offer, property_type: 'apartment', refundable_deposit_aed: null, guests_confirmed: false }]).materials[0];
+  const text = renderPost(m, false);
+  assert.match(text, /Дубай · целые апартаменты/);
+  assert.match(text, /1 ночь, для 2 взрослых/);
+  assert.match(text, /Итог для запрошенных дат нужно проверить/);
+  assert.doesNotMatch(text, /Цена указана для запрошенных дат|На сутки:/);
+});
+
 test('housing extraction selects original evidence by ID without retyping a long quote', () => {
   const r = { ...research, text: `Вступление\n\n1) Учебный отель\n${excerpt}\nИсточник: https://example.com/hotel\n\n2) Другой объект\nЦена 999 AED. https://example.com/other` };
   const block = housingEvidence(r).find(b => b.text.startsWith('1)'));

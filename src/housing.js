@@ -106,6 +106,11 @@ export function housingMaterials(parsed, research, stay, now, canonicalUrl) {
         || !research.text.includes(offer.research_excerpt)) throw new Error('Нет подтверждающего фрагмента исследования');
       if (typeof offer.price_text !== 'string' || !offer.price_text.trim() || offer.price_text.length > 300
         || !offer.research_excerpt.includes(offer.price_text)) throw new Error('Цена должна быть дословной частью подтверждающего фрагмента');
+      // A quoted total for another duration cannot be repurposed for the requested stay,
+      // even when the extractor incorrectly sets dates_confirmed=true.
+      const quotedNights = [...offer.price_text.matchAll(/(?:^|[^\p{L}\d.,])(\d+)\s*(?:nights?\b|ноч(?:ь|и|ей)(?!\p{L}))/giu)]
+        .map(match => Number(match[1]));
+      if (quotedNights.some(n => n !== period.nights)) throw new Error('Указанная цена относится к другому числу ночей');
       const comparable = offer.currency === 'AED' && offer.price_basis === 'stay' && total !== null && deposit !== null
         && offer.available === true && offer.all_mandatory_fees_included === true && offer.dates_confirmed && offer.guests_confirmed;
       const key = JSON.stringify([offer.period, url, offer.property.trim().toLowerCase(), offer.price_text, total, deposit]);
@@ -133,7 +138,7 @@ export function housingMaterials(parsed, research, stay, now, canonicalUrl) {
       : `Среди ${offers.length} найденных предложений здесь указана самая низкая итоговая цена. Условия отмены могут отличаться; это не гарантия самой низкой цены на рынке.`;
     summary.material_id = `housing-${fingerprint.slice(0, 16)}`;
     materials.push({ id: summary.material_id, discovery_key: fingerprint,
-      role: 'housing', topic: 'housing', title: `${label}: ${winner.property}`, facts: [claim],
+      role: 'housing', topic: 'housing', title: `${winner.comparable ? label : 'Объявление'}: ${winner.property}`, facts: [claim],
       source_name: winner.source_name, source_url: winner.source_url, location: winner.location,
       conditions: `Отмена: ${winner.cancellation}`, checked_at: now,
       expires_at: new Date(Date.parse(now) + 3600000).toISOString(), verification: 'automated_research_needs_review',
@@ -145,12 +150,14 @@ export function housingMaterials(parsed, research, stay, now, canonicalUrl) {
 }
 export function housingFields(item) {
   const h = item.housing;
+  const nights = n => `${n} ${n % 100 >= 11 && n % 100 <= 14 ? 'ночей' : n % 10 === 1 ? 'ночь' : n % 10 >= 2 && n % 10 <= 4 ? 'ночи' : 'ночей'}`;
   if (h?.mode === 'informational') {
     const money = n => (n / 100).toFixed(2);
-    return [`Искали на ${h.requested_check_in} — ${h.requested_check_out}, ${h.nights} ночей, для 2 взрослых.`,
+    return [`Дубай · ${h.property_type === 'hotel' ? 'один отдельный номер в отеле' : 'целые апартаменты'}.`,
+      `Искали на ${h.requested_check_in} — ${h.requested_check_out}, ${nights(h.nights)}, для 2 взрослых.`,
       `В объявлении указано: «${h.price_text}». Это не подтверждённая итоговая стоимость нашего проживания.`,
-      h.dates_confirmed ? 'Цена указана для запрошенных дат.' : 'Применимость цены к запрошенным датам не подтверждена.',
-      h.guests_confirmed ? `В источнике указаны 2 взрослых, без детей, ${h.property_type === 'hotel' ? 'один отдельный номер' : 'целые апартаменты'}.` : 'Цена для 2 взрослых не подтверждена.',
+      'Итог для запрошенных дат нужно проверить по ссылке.',
+      h.guests_confirmed ? 'В источнике указаны 2 взрослых, без детей.' : 'Цена для 2 взрослых не подтверждена.',
       h.all_mandatory_fees_included === true ? 'По данным источника, обязательные сборы включены.'
         : h.all_mandatory_fees_included === false ? 'Есть дополнительные сборы; полный итог нужно уточнить.' : 'Состав и размер дополнительных сборов неизвестны.',
       h.deposit_cents === null ? 'Депозит неизвестен.' : `Указанный возвратный депозит отдельно: ${money(h.deposit_cents)} AED.`,
@@ -161,7 +168,7 @@ export function housingFields(item) {
     || h.deposit_cents < 0 || !Number.isInteger(h.nights) || h.nights < 1
     || (date(h.check_out) - date(h.check_in)) / DAY !== h.nights) throw new Error('Некорректные параметры стоимости или срока жилья');
   const money = n => (n / 100).toFixed(2);
-  return [`Заезд ${h.check_in}, выезд ${h.check_out}; ${h.nights} ночей. 2 взрослых, ${h.property_type === 'hotel' ? 'один отдельный номер' : 'целые апартаменты'}.`,
+  return [`Дубай. Заезд ${h.check_in}, выезд ${h.check_out}; ${nights(h.nights)}. 2 взрослых, ${h.property_type === 'hotel' ? 'один отдельный номер в отеле' : 'целые апартаменты'}.`,
     `На сайте указано за весь срок: ${money(h.total_cents)} AED. По данным источника, обязательные налоги и сборы включены.`,
     `Указанный возвратный депозит отдельно: ${money(h.deposit_cents)} AED.`,
     `Найдено: ${item.checked_at}. Цена, наличие и заселение не гарантируются. Перед бронированием проверьте итог и условия по ссылке.`];
