@@ -140,8 +140,13 @@ export async function discover({ query, role, days, settings, now, apiKey, fetch
   const research = collectResearch(first, settings);
   const audit = { ...research, response_id: first.id, model: first.model, usage: first.usage };
   await onResearch(audit);
-  if (!research.citations.length) return { materials: [], rejected: [], research: audit, extraction: null,
-    ...(role === 'housing' ? housingMaterials({ offers: [] }, research, stayPlan(checkIn, now), now, sourceUrl) : {}) };
+  if (!research.citations.length) {
+    const empty = role === 'housing' ? housingMaterials({ offers: [] }, research, stayPlan(checkIn, now), now, sourceUrl)
+      : { materials: [], rejected: [] };
+    if (role === 'housing') empty.rejected.push({ id: null, code: 'research_no_citations',
+      reason: 'Поисковый ответ не содержит цитируемых предложений. Это не подтверждает отсутствие жилья на рынке.' });
+    return { ...empty, research: audit, extraction: null };
+  }
   const second = await createResponse(extractionRequest(research, role, settings, now, checkIn), { apiKey, timeoutMs: settings.timeout_ms, fetchImpl });
   return { ...extractMaterials(second, research, role, settings, now, days, checkIn), research: audit,
     extraction: { response_id: second.id, model: second.model, usage: second.usage } };

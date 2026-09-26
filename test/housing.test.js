@@ -73,6 +73,19 @@ function fakeSearch(quality = true) {
   ];
   return async () => { assert.ok(responses.length); return { ok: true, json: async () => responses.shift() }; };
 }
+test('research that asks a question without citations cannot produce offers or call extraction', async () => {
+  let calls = 0;
+  const result = await discover({ query: 'Жильё', role: 'housing', days: 7, settings, now, apiKey: 'test-only',
+    fetchImpl: async () => { calls++; return { ok: true, json: async () => ({ status: 'completed', output: [
+      { type: 'web_search_call', status: 'completed', action: { sources: [{ url: offer.source_url }] } },
+      { type: 'message', content: [{ type: 'output_text', text: 'Только дешёвые или разные уровни?', annotations: [] }] },
+    ] }) }; } });
+  assert.equal(calls, 1);
+  assert.equal(result.materials.length, 0);
+  assert.equal(result.rejected[0].code, 'research_no_citations');
+  assert.equal(result.extraction, null);
+  assert.equal(result.comparisons.length, 3);
+});
 test('housing report preserves comparison and gates winning offer through consistency checker', async () => {
   for (const quality of [true, false]) {
     const directory = await mkdtemp(join(tmpdir(), 'dubai-housing-'));
