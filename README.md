@@ -71,6 +71,7 @@ node src/search-cli.js --query "События в Дубае на ближайш
 
 ## Документы
 
+- [Подключение закрытой тестовой группы Telegram](docs/telegram.md)
 - [Порядок разработки и окружения](docs/roadmap.md)
 - [Поиск через API и GitHub Actions](docs/search.md)
 - [Поиск жилья: сроки, стоимость и ограничения](docs/housing.md)
