@@ -86,7 +86,8 @@ test('runner persists evidence, deduplicates reworded sources, and enforces dura
   try {
     const first = await runSearch({ ...p, fetchImpl: mock([research, extraction([material])]).fetchImpl });
     assert.equal(first.report.added, 1);
-    assert.match(first.report.drafts[0].text, /Требуется проверка/);
+    assert.match(first.report.drafts[0].review_note, /Требуется проверка/);
+    assert.doesNotMatch(first.report.drafts[0].text, /Найдено автоматически/);
     assert.equal(JSON.parse(await readFile(first.auditPath)).research.citations[0].url, url);
     const second = await runSearch({ ...p, fetchImpl: mock([research, extraction([{ ...material, title: 'Другой заголовок' }])]).fetchImpl });
     assert.equal(second.report.added, 0);
@@ -118,4 +119,25 @@ test('dry-run works without a key and production is blocked', () => {
   assert.equal(JSON.parse(dry.stdout).paid_requests, false);
   assert.equal(run('--env', 'production').status, 1);
   assert.throws(() => researchRequest('x', 'guide', 99, settings, now), /Период/);
+});
+
+test('optional editor is applied only to new drafts and missing key fails before search', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dubai-style-run-'));
+  const styleSettings = JSON.parse(await readFile(new URL('../config/style.json', import.meta.url)));
+  const p = { ...params, editorial, environment: { name: 'test' }, directory, style: 'deepseek', styleSettings };
+  try {
+    const noCalls = mock([]);
+    await assert.rejects(runSearch({ ...p, fetchImpl: noCalls.fetchImpl }), /TEST_DEEPSEEK_API_KEY/);
+    assert.equal(noCalls.calls.length, 0);
+    const editor = { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ body: 'Учебная встреча в клубе.' }) } }] };
+    const checker = { status: 'completed', output: [message(JSON.stringify({ supported: true, complete: true, issues: [] }))] };
+    const io = mock([research, extraction([material]), editor, checker]);
+    const first = await runSearch({ ...p, deepseekKey: 'test-only', fetchImpl: io.fetchImpl });
+    assert.equal(io.calls.length, 4);
+    assert.equal(first.report.drafts[0].style.status, 'accepted');
+    const repeat = mock([research, extraction([material])]);
+    const second = await runSearch({ ...p, deepseekKey: 'test-only', fetchImpl: repeat.fetchImpl });
+    assert.equal(repeat.calls.length, 2);
+    assert.deepEqual(second.report.drafts, JSON.parse(JSON.stringify(first.report.drafts)));
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

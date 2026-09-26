@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { discover, validateSearch } from './search.js';
 import { prepare } from './pipeline.js';
+import { polishDraft } from './style.js';
 import { checkReportEnvironment } from './environment.js';
 import { readJson, withLock, writeJson, writeText } from './storage.js';
 
@@ -13,10 +14,13 @@ export function reserveRun(ledger, now, limit) {
   return { ledger: { ...ledger, runs: [...ledger.runs, run] }, run };
 }
 export async function runSearch({ query, role, days, settings, editorial, environment, apiKey,
+  style = 'none', styleSettings, deepseekKey,
   now = new Date().toISOString(), fetchImpl, directory = resolve(environment.data_directory, 'search') }) {
   if (environment.name !== 'test') throw new Error('Поиск пока доступен только в test');
   validateSearch(query, role, days, settings);
   if (!apiKey?.trim()) throw new Error('Не задан TEST_OPENAI_API_KEY');
+  if (!['none', 'deepseek'].includes(style)) throw new Error('Неизвестный редактор');
+  if (style === 'deepseek' && (!deepseekKey?.trim() || !styleSettings)) throw new Error('Для редактуры нужен TEST_DEEPSEEK_API_KEY и config/style.json');
   // Validate editorial configuration before any paid request.
   prepare([], editorial, [], now);
   const reportPath = resolve(directory, 'report.json');
@@ -41,6 +45,14 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
         else { materials.push(item); keys.add(item.discovery_key); }
       }
       const report = prepare(materials, editorial, fresh, now);
+      if (style === 'deepseek') {
+        // Only polish newly accepted drafts; older text and review state remain intact.
+        for (let i = fresh.length; i < report.drafts.length; i++) {
+          report.drafts[i] = await polishDraft(report.drafts[i], {
+            settings: styleSettings, deepseekKey, openaiKey: apiKey, fetchImpl,
+          });
+        }
+      }
       report.environment = 'test';
       report.duplicates.push(...duplicates);
       report.rejected.push(...result.rejected);
@@ -48,11 +60,13 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
       audit.extraction = result.extraction;
       audit.materials = result.materials;
       audit.rejected = report.rejected;
+      audit.style = report.drafts.slice(fresh.length).map(d => ({ id: d.material.id, ...(d.style ?? { status: 'disabled' }) }));
       audit.status = 'completed';
       await writeJson(auditPath, audit);
       await writeJson(reportPath, report);
       const preview = ['# Черновики для проверки', '', `Подготовлено: ${now}. Отправка в Telegram отключена.`, '',
-        ...report.drafts.filter(d => d.status !== 'expired').flatMap(d => [`## ${d.role} — ${d.status}`, '', d.text, '', '---', ''])];
+        ...report.drafts.filter(d => d.status !== 'expired').flatMap(d => [`## ${d.role} — ${d.status}`, '',
+          d.review_note ?? 'Требуется проверка редактором.', `Редактура: ${d.style?.status ?? 'disabled'}.`, '', '### Текст поста', '', d.text, '', '---', ''])];
       await writeText(resolve(directory, 'drafts.md'), preview.join('\n'));
       reserved.run.status = 'completed';
       reserved.run.added = report.added;

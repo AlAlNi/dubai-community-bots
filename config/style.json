@@ -1,0 +1,8 @@
+{
+  "model": "deepseek-flash",
+  "max_tokens": 1600,
+  "timeout_ms": 45000,
+  "max_body_characters": 1600,
+  "verifier_model": "gpt-5-mini",
+  "verifier_max_output_tokens": 3000
+}

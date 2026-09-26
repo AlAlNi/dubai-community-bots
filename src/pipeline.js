@@ -47,20 +47,17 @@ function fingerprint(item) {
     event_at: item.event_at ?? null, location: item.location ?? null, conditions: item.conditions ?? null,
   })).digest('hex');
 }
-function render(item, demo) {
-  const [name, intro] = voices[item.role];
+export function renderPost(item, demo, body = item.facts.map(f => f.trim()).join('\n')) {
+  const [name] = voices[item.role];
   const lines = [demo ? 'ДЕМО — вымышленные данные, не для публикации.' : null,
-    `${name} · бот`, intro, item.title.trim(), item.facts.map(f => f.trim()).join('\n')];
+    `${name} · бот`, item.title.trim(), body];
   if (item.role === 'events') {
     const date = new Intl.DateTimeFormat('ru-RU', {
       timeZone: 'Asia/Dubai', dateStyle: 'long', timeStyle: 'short',
     }).format(new Date(item.event_at));
-    lines.push(`Когда: ${date} (Дубай).`, `Где: ${item.location}`, `Условия: ${item.conditions}`);
+    lines.push(`${date} (Дубай)\n${item.location}`, item.conditions);
   }
-  lines.push(`Источник: ${item.source_name}\n${item.source_url}`,
-    item.verification === 'automated_research_needs_review'
-      ? `Найдено автоматически: ${item.checked_at}. Требуется проверка редактором.`
-      : `Проверено: ${item.checked_at}`);
+  lines.push(`Источник: ${item.source_name}\n${item.source_url}`);
   return lines.filter(Boolean).join('\n\n');
 }
 export function prepare(items, config, previous = [], now = new Date().toISOString(), demo = false) {
@@ -81,11 +78,14 @@ export function prepare(items, config, previous = [], now = new Date().toISOStri
       validate(item, clock, config.max_source_age_hours);
       const key = fingerprint(item);
       if (seen.has(key)) { duplicates.push(item.id); continue; }
-      const body = render(item, demo);
+      const body = renderPost(item, demo);
       if (body.length > 4000) throw new Error('Черновик длиннее 4000 символов: сократите исходный материал');
       drafts.push({ fingerprint: key, created_at: now, status: 'needs_review',
         review_reason: config.manual_review_topics.includes(item.topic) ? 'sensitive_topic' : 'prototype',
-        demo, role: item.role, material: structuredClone(item), text: body });
+        demo, role: item.role, material: structuredClone(item), text: body,
+        review_note: item.verification === 'automated_research_needs_review'
+          ? `Найдено автоматически: ${item.checked_at}. Требуется проверка редактором.`
+          : `Проверено по входным данным: ${item.checked_at}. Требуется проверка редактором.` });
       seen.add(key);
       added++;
     } catch (error) { rejected.push({ id: item?.id ?? null, reason: error.message }); }

@@ -18,6 +18,11 @@ on:
         required: true
         default: '7'
         type: string
+      use_deepseek:
+        description: 'Редактура DeepSeek + проверка фактов OpenAI (нужен TEST_DEEPSEEK_API_KEY)'
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -27,7 +32,7 @@ jobs:
   search:
     if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,10 +45,12 @@ jobs:
       - name: Search and prepare drafts
         env:
           TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+          TEST_DEEPSEEK_API_KEY: ${{ secrets.TEST_DEEPSEEK_API_KEY }}
+          SEARCH_STYLE: ${{ inputs.use_deepseek && 'deepseek' || 'none' }}
           SEARCH_QUERY: ${{ inputs.query }}
           SEARCH_ROLE: ${{ inputs.role }}
           SEARCH_DAYS: ${{ inputs.days }}
-        run: node src/search-cli.js --env test --query "$SEARCH_QUERY" --role "$SEARCH_ROLE" --days "$SEARCH_DAYS"
+        run: node src/search-cli.js --env test --query "$SEARCH_QUERY" --role "$SEARCH_ROLE" --days "$SEARCH_DAYS" --style "$SEARCH_STYLE"
       - name: Save drafts and research
         if: always()
         uses: actions/upload-artifact@v4
