@@ -34,6 +34,7 @@ export function researchRequest(query, role, days, settings, now) {
 Укажи название, практические факты, дату публикации если известна, URL и название источника.
 Кроме логистики найди содержательные детали: что будет, для кого предназначено и какие ограничения есть. Указывай это только по источнику.
 Для события нужны точные будущие дата и время по Дубаю, место и условия. Не выдумывай отсутствующие сведения; исключи событие без подтверждённого времени.
+Календарь — только отправная точка. В пределах лимита инструментов сразу открой карточку конкретного события или найди страницу организатора с часами начала. Не выдавай общий календарь за отдельное событие. Не предлагай пользователю открыть карточки позже и не задавай вопросы: выполни этот шаг сейчас. Лучше один полностью подтверждённый материал, чем три неполных. Если время так и не найдено, явно сообщи об отсутствии подходящих событий.
 Различай дату публикации и дату события. Исключай истёкшие предложения. Не давай персональных юридических, медицинских и финансовых советов.
 Если подтверждённых результатов нет, так и сообщи. Не заполняй подборку общими советами из памяти.`,
     input: JSON.stringify({ location: 'Dubai, UAE', timezone: 'Asia/Dubai', now, until: end, role, query }),
@@ -75,6 +76,7 @@ title — короткое название без повторения адре
 conditions должны совпадать с facts и исследованием по смыслу и обязательности. Не заменяй «должны» на «рекомендуется», «возможно» на «точно», не убирай отрицания. Если исследование противоречит само себе и нельзя подтвердить одну версию, пропусти материал.
 Для каждого факта research_excerpt — точная непустая подстрока исследования, на которую опирается пересказ; это не цитата с исходного сайта.
 Даты ISO 8601 с часовым поясом. expires_at не позже чем через 24 часа от now, для событий не позже начала события.
+event_at — единственный момент начала, например 2026-09-30T09:00:00+04:00, не диапазон и не дата без часов. Время открытия дверей и окончания сохраняй отдельно в facts. Для многодневного события используй подтверждённое начало первого дня, остальные часы сохрани в facts. При отсутствии точного начала исключи материал целиком; не подставляй полночь.
 Для роли events нужны подтверждённые точные event_at, location и conditions. Если условий нет, явно напиши, что их нужно уточнить у организатора.
 Не придумывай время по одному лишь дню события. Материал с недостаточными сведениями пропускай. published_at — null, если дата публикации неизвестна.
 Если нет подходящих фактов, верни materials: []. Не добавляй знания из памяти.`,
@@ -99,9 +101,17 @@ export function extractMaterials(response, research, role, settings, now, days) 
             || !research.text.includes(fact.research_excerpt)) throw new Error('Факт не связан с фрагментом исследования');
       }
       const current = timestamp(now);
-      const expires = Math.min(timestamp(candidate.expires_at), current + 86400000);
+      const parseDate = field => {
+        if (candidate[field] === null || candidate[field] === undefined || candidate[field] === '') {
+          throw new Error(`Не указано ${field}: нужна подтверждённая дата и время с часовым поясом`);
+        }
+        try { return timestamp(candidate[field]); }
+        catch { throw new Error(`Некорректное ${field}: нужен один момент ISO 8601 с часовым поясом, не диапазон`); }
+      };
+      const expires = Math.min(parseDate('expires_at'), current + 86400000);
       if (expires <= current) throw new Error('Материал устарел');
-      if (role === 'events' && (timestamp(candidate.event_at) <= current || timestamp(candidate.event_at) > current + days * 86400000)) throw new Error('Событие вне заданного периода');
+      const eventTime = role === 'events' || candidate.event_at != null ? parseDate('event_at') : null;
+      if (role === 'events' && (eventTime <= current || eventTime > current + days * 86400000)) throw new Error('Событие вне заданного периода');
       const key = createHash('sha256').update(JSON.stringify([role, url, candidate.event_at])).digest('hex');
       accepted.push({ id: `search-${key.slice(0,16)}`, discovery_key: key, role, topic: candidate.topic,
         title: candidate.title, source_name: candidate.source_name, source_url: url,
@@ -109,7 +119,10 @@ export function extractMaterials(response, research, role, settings, now, days) 
         event_at: candidate.event_at, location: candidate.location, conditions: candidate.conditions,
         checked_at: now, expires_at: new Date(role === 'events' ? Math.min(expires, timestamp(candidate.event_at)) : expires).toISOString(),
         verification: 'automated_research_needs_review' });
-    } catch (error) { rejected.push({ id: null, reason: error.message }); }
+    } catch (error) { rejected.push({ id: null, reason: error.message,
+      title: typeof candidate?.title === 'string' ? candidate.title.slice(0, 300) : null,
+      event_at: typeof candidate?.event_at === 'string' ? candidate.event_at.slice(0, 100) : null,
+      expires_at: typeof candidate?.expires_at === 'string' ? candidate.expires_at.slice(0, 100) : null }); }
   }
   return { materials: accepted, rejected };
 }

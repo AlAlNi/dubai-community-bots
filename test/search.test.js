@@ -34,6 +34,17 @@ const mock = responses => {
 };
 const params = { query: 'Учебные события в Дубае', role: 'events', days: 7, settings, now, apiKey: 'test-placeholder' };
 
+test('date rejection identifies material and field without inventing missing event time', async () => {
+  for (const change of [{ event_at: null }, { event_at: '2026-09-27' },
+    { event_at: '2026-09-27T18:00:00+04:00/2026-09-28T18:00:00+04:00' }, { expires_at: 'tomorrow' }]) {
+    const result = await discover({ ...params, fetchImpl: mock([research, extraction([{ ...material, ...change }])]).fetchImpl });
+    assert.equal(result.materials.length, 0);
+    assert.equal(result.rejected[0].title, material.title);
+    assert.ok(result.rejected[0].reason.includes(Object.keys(change)[0]));
+    assert.equal(result.rejected[0].event_at, change.event_at === undefined ? material.event_at : change.event_at);
+  }
+});
+
 test('research requires live search, caps calls, and extraction accepts cited evidence', async () => {
   const io = mock([research, extraction([material])]);
   const result = await discover({ ...params, fetchImpl: io.fetchImpl });
