@@ -1,0 +1,54 @@
+name: Search Dubai (test)
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: 'Тема поиска о Дубае'
+        required: true
+        default: 'События в Дубае на ближайшие 7 дней'
+        type: string
+      role:
+        description: 'Роль бота'
+        required: true
+        default: events
+        type: choice
+        options: [guide, events, transport, everyday]
+      days:
+        description: 'Период поиска, 1–14 дней'
+        required: true
+        default: '7'
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: dubai-search-test
+  cancel-in-progress: false
+jobs:
+  search:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run offline tests
+        run: node --test
+      - name: Search and prepare drafts
+        env:
+          TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+          SEARCH_QUERY: ${{ inputs.query }}
+          SEARCH_ROLE: ${{ inputs.role }}
+          SEARCH_DAYS: ${{ inputs.days }}
+        run: node src/search-cli.js --env test --query "$SEARCH_QUERY" --role "$SEARCH_ROLE" --days "$SEARCH_DAYS"
+      - name: Save drafts and research
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dubai-search-test-${{ github.run_number }}
+          path: data/test/search/
+          retention-days: 7
+          if-no-files-found: ignore

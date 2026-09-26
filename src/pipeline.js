@@ -57,7 +57,10 @@ function render(item, demo) {
     }).format(new Date(item.event_at));
     lines.push(`Когда: ${date} (Дубай).`, `Где: ${item.location}`, `Условия: ${item.conditions}`);
   }
-  lines.push(`Источник: ${item.source_name}\n${item.source_url}`, `Проверено: ${item.checked_at}`);
+  lines.push(`Источник: ${item.source_name}\n${item.source_url}`,
+    item.verification === 'automated_research_needs_review'
+      ? `Найдено автоматически: ${item.checked_at}. Требуется проверка редактором.`
+      : `Проверено: ${item.checked_at}`);
   return lines.filter(Boolean).join('\n\n');
 }
 export function prepare(items, config, previous = [], now = new Date().toISOString(), demo = false) {

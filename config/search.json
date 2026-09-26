@@ -1,0 +1,9 @@
+{
+  "model": "gpt-5-mini",
+  "max_materials": 3,
+  "max_tool_calls": 3,
+  "max_output_tokens": 6000,
+  "max_runs_per_day": 6,
+  "timeout_ms": 90000,
+  "max_research_characters": 24000
+}
