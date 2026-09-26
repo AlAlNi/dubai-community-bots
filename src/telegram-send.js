@@ -46,6 +46,13 @@ export function githubJournal({ token, repository, fetchImpl = fetch }) {
 export async function sendHousing({ report, draftId, confirmed, token, chatId, journal,
   fetchImpl = fetch, now = () => Date.now() }) {
   const draft = approvedDraft(report, draftId, confirmed, now());
+  return sendTestText({ token, chatId, journal, fetchImpl, now, text: draft.text,
+    identity: draft.material.discovery_key, beforeSend: () => approvedDraft(report, draftId, confirmed, now()) });
+}
+
+export async function sendTestText({ token, chatId, journal, fetchImpl = fetch, now = () => Date.now(),
+  text, identity, beforeSend = () => {} }) {
+  if (typeof text !== 'string' || !text.trim() || text.length > 4000 || !identity) throw new Error('Некорректное тестовое сообщение');
   if (typeof token !== 'string' || !/^\d+:[A-Za-z0-9_-]+$/.test(token)
     || typeof chatId !== 'string' || !/^-[1-9]\d*$/.test(chatId) || !Number.isSafeInteger(Number(chatId))) {
     throw new Error('Проверьте TEST_TELEGRAM_HOUSING_BOT_TOKEN и TEST_TELEGRAM_CHAT_ID');
@@ -67,14 +74,14 @@ export async function sendHousing({ report, draftId, confirmed, token, chatId, j
   const chat = await call('getChat', { chat_id: chatId });
   if (String(chat?.id) !== chatId || !['group', 'supergroup'].includes(chat.type)
     || chat.username || chat.active_usernames?.length || chat.is_forum) throw new Error('Нужна закрытая тестовая группа без тем');
-  const key = hash(`${TEST_BOT}\n${chatId}\n${draft.material.discovery_key}`);
+  const key = hash(`${TEST_BOT}\n${chatId}\n${identity}`);
   const record = { version: 1, status: 'reserved', reserved_at: new Date(now()).toISOString(),
-    text_sha256: hash(draft.text) };
+    text_sha256: hash(text) };
   // Atomic file creation without a SHA fails if any earlier attempt reserved this key.
   // This happens BEFORE sendMessage, so cancellation or an ambiguous reply cannot cause a retry.
   const sha = await journal.reserve(key, record);
-  approvedDraft(report, draftId, confirmed, now());
-  const sent = await call('sendMessage', { chat_id: chatId, text: draft.text,
+  beforeSend();
+  const sent = await call('sendMessage', { chat_id: chatId, text,
     link_preview_options: { is_disabled: true }, disable_notification: true });
   if (!Number.isSafeInteger(sent?.message_id) || String(sent.chat?.id) !== chatId) {
     throw new Error('Результат отправки не подтверждён; проверьте группу. Резервирование сохранено');

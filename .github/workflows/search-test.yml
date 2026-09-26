@@ -5,12 +5,12 @@ on:
       query:
         description: 'Тема поиска о Дубае'
         required: true
-        default: 'События в Дубае на ближайшие 7 дней'
+        default: 'Недорогие отели и отдельные апартаменты в Дубае: найденная цена и ссылка'
         type: string
       role:
         description: 'Роль бота'
         required: true
-        default: events
+        default: housing
         type: choice
         options: [guide, events, transport, everyday, housing]
       check_in:
@@ -28,6 +28,11 @@ on:
         required: true
         default: false
         type: boolean
+      send_to_test:
+        description: 'Сразу прислать тестовый результат в закрытую группу, включая причины отклонения'
+        required: true
+        default: true
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -38,6 +43,8 @@ jobs:
     if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,6 +67,14 @@ jobs:
           args=()
           if [ -n "$CHECK_IN" ]; then args+=(--check-in "$CHECK_IN"); fi
           node src/search-cli.js --env test --query "$SEARCH_QUERY" --role "$SEARCH_ROLE" --days "$SEARCH_DAYS" --style "$SEARCH_STYLE" "${args[@]}"
+      - name: Send test preview
+        if: success() && inputs.send_to_test
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TEST_TELEGRAM_HOUSING_BOT_TOKEN: ${{ secrets.TEST_TELEGRAM_HOUSING_BOT_TOKEN }}
+          TEST_TELEGRAM_CHAT_ID: ${{ secrets.TEST_TELEGRAM_CHAT_ID }}
+          SEARCH_ROLE: ${{ inputs.role }}
+        run: node src/telegram-preview-cli.js
       - name: Save drafts and research
         if: always()
         uses: actions/upload-artifact@v4
