@@ -1,0 +1,14 @@
+{
+  "status": "proposal",
+  "language": "ru",
+  "timezone": "Asia/Dubai",
+  "platform": "telegram",
+  "publication_mode": "draft_only",
+  "daily_post_limit_total": 4,
+  "minimum_gap_minutes": 90,
+  "publication_window": { "start": "09:00", "end": "21:00" },
+  "require_source_url": true,
+  "manual_review_topics": ["legal", "immigration", "medical", "financial"],
+  "roles": ["guide", "events", "transport", "everyday"],
+  "sources": []
+}
