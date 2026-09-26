@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { stayPlan, housingMaterials } from '../src/housing.js';
+import { stayPlan, housingMaterials, housingEvidence, housingExtractionRequest } from '../src/housing.js';
 import { researchRequest, sourceUrl, discover } from '../src/search.js';
 import { renderPost } from '../src/pipeline.js';
 import { runSearch } from '../src/search-runner.js';
@@ -19,6 +19,34 @@ const offer = { period: 'day', property: 'Учебный отель', property_t
   cancellation: 'Без возврата', source_name: 'Учебный источник', source_url: 'https://example.com/hotel', research_excerpt: excerpt };
 const research = { text: excerpt, citations: [{ url: offer.source_url }, { url: 'https://example.com/other' }] };
 const convert = offers => housingMaterials({ offers }, research, stay, now, sourceUrl);
+
+test('housing extraction selects original evidence by ID without retyping a long quote', () => {
+  const r = { ...research, text: `Вступление\n\n1) Учебный отель\n${excerpt}\nИсточник: https://example.com/hotel\n\n2) Другой объект\nЦена 999 AED. https://example.com/other` };
+  const block = housingEvidence(r).find(b => b.text.startsWith('1)'));
+  const candidate = { ...offer, evidence_id: block.id, research_excerpt: 'Rewritten text must be ignored.' };
+  const result = housingMaterials({ offers: [candidate] }, r, stay, now, sourceUrl);
+  assert.equal(result.materials.length, 1);
+  assert.equal(result.materials[0].housing.research_excerpt, block.text);
+  const req = housingExtractionRequest(r, settings, now, stay);
+  assert.ok(req.text.format.schema.properties.offers.items.required.includes('evidence_id'));
+  assert.ok(!req.text.format.schema.properties.offers.items.required.includes('research_excerpt'));
+  assert.deepEqual(JSON.parse(req.input).evidence_blocks, housingEvidence(r));
+  for (const changes of [{ evidence_id: 'invented' }, { source_url: 'https://example.com/other' }, { price_text: '100 AED' }]) {
+    const rejected = housingMaterials({ offers: [{ ...candidate, ...changes }] }, r, stay, now, sourceUrl);
+    assert.equal(rejected.materials.length, 0);
+    assert.equal(rejected.rejected.length, 1);
+  }
+});
+test('missing district is explicit unknown while shared rooms and other cities remain rejected', () => {
+  for (const location of ['', '  ', null]) {
+    const result = convert([{ ...offer, location }]);
+    assert.equal(result.materials.length, 1);
+    assert.match(renderPost(result.materials[0], false), /Район не указан/);
+  }
+  for (const changes of [{ city: 'Sharjah' }, { private_unit: false }, { adults: 1 }]) {
+    assert.equal(convert([{ ...offer, ...changes }]).materials.length, 0);
+  }
+});
 test('stay dates use Dubai tomorrow and calendar month, including month-end and leap year', () => {
   assert.equal(stayPlan(undefined, '2026-09-26T21:00:00Z').periods[0].check_in, '2026-09-28');
   const p = stayPlan('2028-01-31', now).periods;
