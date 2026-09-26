@@ -149,6 +149,8 @@ test('verifier receives search metadata independently of unknown provider occupa
   assert.equal(input.application_context.housing_search.adults, 2);
   assert.equal(input.application_context.housing_search.check_in, '2026-10-01');
   assert.equal(input.source.housing.adults, null);
+  assert.ok(input.application_context.editorial_notices.includes('Цена может измениться.'));
+  assert.match(req.instructions, /разрешена без цитаты источника/);
   assert.match(req.instructions, /такие утверждения всё равно требуют evidence/);
   assert.match(req.instructions, /studio — студия целиком/);
   assert.match(req.instructions, /private_unit=true всё равно требует подтверждения evidence/);

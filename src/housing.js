@@ -165,7 +165,7 @@ export function housingFields(item) {
       ...(!h.guests_confirmed ? ['Применимость тарифа к этому составу гостей не подтверждена.'] : []),
       ...(h.fees_text ? (h.price_text.includes(h.fees_text) ? [] : [`Условия тарифа: «${h.fees_text}».`])
         : [h.all_mandatory_fees_included === true ? 'По данным источника, обязательные налоги и сборы включены.'
-          : h.all_mandatory_fees_included === false ? 'Налоги и сборы включены не полностью.' : 'Состав и размер налогов и сборов неизвестны.']),
+          : h.all_mandatory_fees_included === false ? 'Налоги и сборы включены не полностью.' : 'Разбивка налогов и сборов отдельно не подтверждена.']),
       ...(h.price_basis === 'night' && !/night|ноч|сут/iu.test(`${h.price_text} ${h.fees_text ?? ''}`) ? ['Указан тариф за ночь.'] : []),
       h.deposit_cents === null ? 'Депозит неизвестен.' : `Указанный возвратный депозит отдельно: ${money(h.deposit_cents)} AED.`,
       h.available === true ? 'По данным источника, вариант доступен на момент поиска.' : 'Наличие на даты не подтверждено.',

@@ -20,6 +20,26 @@ const offer = { period: 'day', property: 'Учебный отель', property_t
 const research = { text: excerpt, citations: [{ url: offer.source_url }, { url: 'https://example.com/other' }] };
 const convert = offers => housingMaterials({ offers }, research, stay, now, sourceUrl);
 
+test('quoted cancellation and district in property name appear once without dropping extra restrictions', () => {
+  const cancellation = 'Free cancellation before 18:00 on 25 September 2026';
+  const price_text = `Total US$72.32 … Includes taxes and charges … ${cancellation}`;
+  const r = { ...research, text: 'Учебный объект, отдельное жильё. ' + price_text };
+  const candidate = { ...offer, property: 'Учебный объект Dubai Land', location: 'Dubai Land', cancellation,
+    price_text, research_excerpt: r.text, total_aed: null, currency: 'USD', all_mandatory_fees_included: null };
+  const m = housingMaterials({ offers: [candidate] }, r, stay, now, sourceUrl).materials[0];
+  const post = renderPost(m, false);
+  assert.equal(post.split(cancellation).length - 1, 1);
+  assert.equal(post.split('Dubai Land').length - 1, 1);
+  assert.match(post, /Includes taxes and charges/);
+  assert.match(post, /Разбивка налогов и сборов отдельно не подтверждена/);
+  assert.match(renderPost({ ...m, conditions: m.conditions + '; паспорт обязателен' }, false), /паспорт обязателен/);
+  assert.match(renderPost({ ...m, location: 'Dubai Land, улица 2' }, false), /Dubai Land, улица 2/);
+  assert.match(renderPost({ ...m, title: 'Учебный объект Dubai Landing' }, false), /\n\nDubai Land\n/);
+  const full = convert([offer]).materials[0];
+  full.housing.price_text += ' ' + full.housing.cancellation;
+  assert.match(renderPost(full, false), /Отмена: Без возврата/);
+});
+
 test('tax exclusion and nightly unit retain the exact evidence without invented fee types or repeated guests', () => {
   const fees_text = 'Price per night (TAX Not included)';
   const text = 'Учебный объект в Дубае. AED 294. ' + fees_text + '. Отдельное жильё для двух взрослых без детей.';

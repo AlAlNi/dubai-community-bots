@@ -61,8 +61,20 @@ export function publicationFields(item) {
       timeZone: 'Asia/Dubai', dateStyle: 'long', timeStyle: 'short',
     }).format(new Date(item.event_at))} (Дубай)`);
   }
-  if (item.location) fields.push(item.location);
-  if (item.conditions) fields.push(item.conditions);
+  const normalized = s => s.toLocaleLowerCase('ru').replace(/\s+/gu, ' ').trim();
+  const locationInTitle = item.role === 'housing' && item.location && (() => {
+    const escaped = normalized(item.location).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, 'u').test(normalized(item.title));
+  })();
+  if (item.location && !locationInTitle) fields.push(item.location);
+  // Only omit the exact cancellation field when the complete condition is already quoted.
+  // Additional restrictions in item.conditions must remain visible.
+  const cancellation = item.housing?.cancellation;
+  const cancellationQuoted = item.role === 'housing' && item.housing.mode === 'informational'
+    && typeof cancellation === 'string' && cancellation.trim()
+    && item.conditions === `Отмена: ${cancellation}`
+    && [item.housing.price_text, item.housing.fees_text].some(s => typeof s === 'string' && s.includes(cancellation));
+  if (item.conditions && !cancellationQuoted) fields.push(item.conditions);
   return fields;
 }
 export function renderPost(item, demo, body = item.facts.map(f => f.trim()).join('\n')) {
