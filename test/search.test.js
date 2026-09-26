@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -22,6 +22,7 @@ const material = { title: 'Учебная встреча', topic: 'events', sour
   published_at: null, expires_at: '2026-09-26T18:00:00+04:00', event_at: '2026-09-26T18:00:00+04:00',
   location: 'Вымышленный клуб', conditions: 'Уточните у организатора.', facts: [{ text: 'Учебная встреча в клубе.', research_excerpt: excerpt }] };
 const extraction = materials => ({ id: 'mock-extraction', model: 'mock', status: 'completed', output: [message(JSON.stringify({ materials }))] });
+const quality = (extra = {}) => ({ status: 'completed', output: [message(JSON.stringify({ source_consistent: true, non_redundant: true, supported: true, complete: true, issues: [], ...extra }))] });
 const mock = responses => {
   const calls = [];
   return { calls, fetchImpl: async (endpoint, options) => {
@@ -84,7 +85,7 @@ test('runner persists evidence, deduplicates reworded sources, and enforces dura
   const directory = await mkdtemp(join(tmpdir(), 'dubai-search-'));
   const p = { ...params, settings: { ...settings, max_runs_per_day: 2 }, editorial, environment: { name: 'test' }, directory };
   try {
-    const first = await runSearch({ ...p, fetchImpl: mock([research, extraction([material])]).fetchImpl });
+    const first = await runSearch({ ...p, fetchImpl: mock([research, extraction([material]), quality()]).fetchImpl });
     assert.equal(first.report.added, 1);
     assert.match(first.report.drafts[0].review_note, /Требуется проверка/);
     assert.doesNotMatch(first.report.drafts[0].text, /Найдено автоматически/);
@@ -101,7 +102,7 @@ test('failed extraction keeps research and consumes a slot without replacing exi
   const directory = await mkdtemp(join(tmpdir(), 'dubai-search-failure-'));
   const p = { ...params, editorial, environment: { name: 'test' }, directory };
   try {
-    const first = await runSearch({ ...p, fetchImpl: mock([research, extraction([material])]).fetchImpl });
+    const first = await runSearch({ ...p, fetchImpl: mock([research, extraction([material]), quality()]).fetchImpl });
     const before = await readFile(first.reportPath, 'utf8');
     await assert.rejects(runSearch({ ...p, fetchImpl: mock([research, { status: 'incomplete' }]).fetchImpl }));
     assert.equal(await readFile(first.reportPath, 'utf8'), before);
@@ -130,7 +131,7 @@ test('optional editor is applied only to new drafts and missing key fails before
     await assert.rejects(runSearch({ ...p, fetchImpl: noCalls.fetchImpl }), /TEST_DEEPSEEK_API_KEY/);
     assert.equal(noCalls.calls.length, 0);
     const editor = { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ body: 'Учебная встреча в клубе.' }) } }] };
-    const checker = { status: 'completed', output: [message(JSON.stringify({ supported: true, complete: true, issues: [] }))] };
+    const checker = quality();
     const io = mock([research, extraction([material]), editor, checker]);
     const first = await runSearch({ ...p, deepseekKey: 'test-only', fetchImpl: io.fetchImpl });
     assert.equal(io.calls.length, 4);
@@ -139,5 +140,37 @@ test('optional editor is applied only to new drafts and missing key fails before
     const second = await runSearch({ ...p, deepseekKey: 'test-only', fetchImpl: repeat.fetchImpl });
     assert.equal(repeat.calls.length, 2);
     assert.deepEqual(second.report.drafts, JSON.parse(JSON.stringify(first.report.drafts)));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('without DeepSeek, source conflicts block draft text and preview but preserve diagnostic evidence', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dubai-quality-'));
+  try {
+    const io = mock([research, extraction([material]), quality({ source_consistent: false, issues: ['Конфликт условий.'] })]);
+    const result = await runSearch({ ...params, editorial, environment: { name: 'test' }, directory, fetchImpl: io.fetchImpl });
+    assert.equal(io.calls.length, 3);
+    assert.equal(result.report.drafts[0].status, 'blocked');
+    assert.equal(result.report.drafts[0].text, null);
+    assert.equal(result.report.drafts[0].style.verdict.issues[0], 'Конфликт условий.');
+    const preview = await readFile(join(directory, 'drafts.md'), 'utf8');
+    assert.doesNotMatch(preview, /### Текст поста|Учебная встреча в клубе/);
+    assert.match(preview, /source_conflict/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('saved drafts from the older checker cannot bypass the new quality gate', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dubai-old-quality-'));
+  const p = { ...params, editorial, environment: { name: 'test' }, directory };
+  try {
+    const first = await runSearch({ ...p, fetchImpl: mock([research, extraction([material]), quality()]).fetchImpl });
+    const old = first.report;
+    delete old.drafts[0].style.verdict;
+    await writeFile(first.reportPath, JSON.stringify(old));
+    const io = mock([research, extraction([material])]);
+    const next = await runSearch({ ...p, fetchImpl: io.fetchImpl });
+    assert.equal(io.calls.length, 2);
+    assert.equal(next.report.drafts[0].review_reason, 'quality_check_required');
+    assert.equal(next.report.drafts[0].text, null);
+    assert.doesNotMatch(await readFile(join(directory, 'drafts.md'), 'utf8'), /### Текст поста/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

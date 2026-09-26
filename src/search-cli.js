@@ -28,16 +28,17 @@ async function main() {
   const now = new Date().toISOString();
   const style = options['--style'] ?? 'none';
   if (!['none', 'deepseek'].includes(style)) throw new Error('Выберите --style none или deepseek');
-  const styleSettings = style === 'deepseek' ? JSON.parse(await readFile(new URL('../config/style.json', import.meta.url), 'utf8')) : null;
+  const styleSettings = JSON.parse(await readFile(new URL('../config/style.json', import.meta.url), 'utf8'));
   if (options['--dry-run']) {
     console.log(JSON.stringify({ paid_requests: false, environment: 'test', style, request: researchRequest(query, role, days, settings, now) }, null, 2));
     return;
   }
   try { loadEnvFile('.env'); } catch (error) { if (error.code !== 'ENOENT') throw new Error('Не удалось загрузить локальный .env'); }
-  console.log(`Поиск: ${role}, ${days} дней. До 2 запросов поиска/извлечения и ${settings.max_tool_calls} вызовов веб-поиска. Редактор: ${style}; до ${style === 'deepseek' ? 2 * settings.max_materials : 0} дополнительных API-запросов. Telegram отключён.`);
+  console.log(`Поиск: ${role}, ${days} дней. До 2 запросов поиска/извлечения и ${settings.max_tool_calls} вызовов веб-поиска. Редактор: ${style}; до ${(style === 'deepseek' ? 2 : 1) * settings.max_materials} дополнительных API-запросов. Telegram отключён.`);
   const result = await runSearch({ query, role, days, settings, editorial, environment, now, apiKey: process.env.TEST_OPENAI_API_KEY,
     style, styleSettings, deepseekKey: process.env.TEST_DEEPSEEK_API_KEY });
   console.log(`Новых черновиков: ${result.report.added}; повторов: ${result.report.duplicates.length}; отклонено: ${result.report.rejected.length}.`);
+  console.log(`Заблокировано проверкой: ${result.report.drafts.filter(d => d.status === 'blocked').length}. Причины — в report.json.`);
   console.log(`Черновики: ${result.reportPath}\nИсточники и исследование: ${result.auditPath}`);
   // Draft bodies stay in the artifact, avoiding unnecessary user content in CI logs.
 }

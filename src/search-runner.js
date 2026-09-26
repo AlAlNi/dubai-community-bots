@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { discover, validateSearch } from './search.js';
 import { prepare } from './pipeline.js';
-import { polishDraft } from './style.js';
+import { polishDraft, checkDraft } from './style.js';
 import { checkReportEnvironment } from './environment.js';
 import { readJson, withLock, writeJson, writeText } from './storage.js';
+
+const defaultStyleSettings = JSON.parse(await readFile(new URL('../config/style.json', import.meta.url), 'utf8'));
 
 export function reserveRun(ledger, now, limit) {
   if (ledger.version !== 1 || !Array.isArray(ledger.runs)) throw new Error('Повреждён журнал запусков');
@@ -14,7 +17,7 @@ export function reserveRun(ledger, now, limit) {
   return { ledger: { ...ledger, runs: [...ledger.runs, run] }, run };
 }
 export async function runSearch({ query, role, days, settings, editorial, environment, apiKey,
-  style = 'none', styleSettings, deepseekKey,
+  style = 'none', styleSettings = defaultStyleSettings, deepseekKey,
   now = new Date().toISOString(), fetchImpl, directory = resolve(environment.data_directory, 'search') }) {
   if (environment.name !== 'test') throw new Error('Поиск пока доступен только в test');
   validateSearch(query, role, days, settings);
@@ -38,6 +41,14 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
       const result = await discover({ query, role, days, settings, now, apiKey, fetchImpl,
         onResearch: async research => { audit.research = research; await writeJson(auditPath, audit); } });
       const fresh = prepare([], editorial, previous?.drafts ?? [], now).drafts;
+      for (const draft of fresh) {
+        if (draft.status !== 'expired' && draft.status !== 'blocked' && draft.style?.verdict?.source_consistent !== true) {
+          draft.original_text ??= draft.text;
+          draft.text = null;
+          draft.status = 'blocked';
+          draft.review_reason = 'quality_check_required';
+        }
+      }
       const keys = new Set(fresh.filter(d => d.status !== 'expired').map(d => d.material.discovery_key).filter(Boolean));
       const materials = [], duplicates = [];
       for (const item of result.materials) {
@@ -45,13 +56,12 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
         else { materials.push(item); keys.add(item.discovery_key); }
       }
       const report = prepare(materials, editorial, fresh, now);
-      if (style === 'deepseek') {
-        // Only polish newly accepted drafts; older text and review state remain intact.
-        for (let i = fresh.length; i < report.drafts.length; i++) {
-          report.drafts[i] = await polishDraft(report.drafts[i], {
-            settings: styleSettings, deepseekKey, openaiKey: apiKey, fetchImpl,
-          });
-        }
+      // All new search drafts need a consistency check, even without DeepSeek.
+      for (let i = fresh.length; i < report.drafts.length; i++) {
+        const check = style === 'deepseek' ? polishDraft : checkDraft;
+        report.drafts[i] = await check(report.drafts[i], {
+          settings: styleSettings, deepseekKey, openaiKey: apiKey, fetchImpl,
+        });
       }
       report.environment = 'test';
       report.duplicates.push(...duplicates);
@@ -66,7 +76,9 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
       await writeJson(reportPath, report);
       const preview = ['# Черновики для проверки', '', `Подготовлено: ${now}. Отправка в Telegram отключена.`, '',
         ...report.drafts.filter(d => d.status !== 'expired').flatMap(d => [`## ${d.role} — ${d.status}`, '',
-          d.review_note ?? 'Требуется проверка редактором.', `Редактура: ${d.style?.status ?? 'disabled'}.`, '', '### Текст поста', '', d.text, '', '---', ''])];
+          d.review_note ?? 'Требуется проверка редактором.', `Редактура: ${d.style?.status ?? 'disabled'}.`, '',
+          ...(d.status === 'blocked' ? [`Заблокировано: ${d.review_reason}. Подробности — в report.json. Исходник не готов к публикации.`]
+            : ['### Текст поста', '', d.text]), '', '---', ''])];
       await writeText(resolve(directory, 'drafts.md'), preview.join('\n'));
       reserved.run.status = 'completed';
       reserved.run.added = report.added;

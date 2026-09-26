@@ -47,16 +47,33 @@ function fingerprint(item) {
     event_at: item.event_at ?? null, location: item.location ?? null, conditions: item.conditions ?? null,
   })).digest('hex');
 }
+export function publicationFields(item) {
+  const fields = [item.title.trim()];
+  if (item.event_at) {
+    timestamp(item.event_at);
+    fields.push(`${new Intl.DateTimeFormat('ru-RU', {
+      timeZone: 'Asia/Dubai', dateStyle: 'long', timeStyle: 'short',
+    }).format(new Date(item.event_at))} (Дубай)`);
+  }
+  if (item.location) fields.push(item.location);
+  if (item.conditions) fields.push(item.conditions);
+  return fields;
+}
 export function renderPost(item, demo, body = item.facts.map(f => f.trim()).join('\n')) {
   const [name] = voices[item.role];
+  const [title, ...details] = publicationFields(item);
+  // Remove only exact repetitions. Semantic overlap is checked separately;
+  // never delete a whole sentence just because it also contains a date.
+  const normalize = s => s.toLocaleLowerCase('ru').replace(/\s+/g, ' ').trim().replace(/[.!;]+$/u, '');
+  const seen = new Set([title, ...details].map(normalize));
+  const uniqueBody = body.split('\n').filter(line => {
+    const key = normalize(line);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).join('\n');
   const lines = [demo ? 'ДЕМО — вымышленные данные, не для публикации.' : null,
-    `${name} · бот`, item.title.trim(), body];
-  if (item.role === 'events') {
-    const date = new Intl.DateTimeFormat('ru-RU', {
-      timeZone: 'Asia/Dubai', dateStyle: 'long', timeStyle: 'short',
-    }).format(new Date(item.event_at));
-    lines.push(`${date} (Дубай)\n${item.location}`, item.conditions);
-  }
+    `${name} · бот`, title, uniqueBody, ...details];
   lines.push(`Источник: ${item.source_name}\n${item.source_url}`);
   return lines.filter(Boolean).join('\n\n');
 }
