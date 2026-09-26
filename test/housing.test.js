@@ -124,6 +124,16 @@ test('unknown deposit, fees or price basis downgrades to informational rather th
     assert.equal(r.comparisons[0].count, 0);
   }
 });
+
+test('confirmed occupancy describes only the actual property type in both housing modes', () => {
+  for (const property_type of ['hotel', 'apartment']) for (const refundable_deposit_aed of [0, null]) {
+    const m = convert([{ ...offer, property_type, refundable_deposit_aed }]).materials[0];
+    const text = renderPost(m, false);
+    assert.match(text, property_type === 'hotel' ? /один отдельный номер/ : /целые апартаменты/);
+    assert.doesNotMatch(text, /номер или апартаменты|1 целые/);
+    if (property_type === 'hotel') assert.doesNotMatch(text, /апартаменты/);
+  }
+});
 test('informational cards still pass through quality checker and report selected draft status', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dubai-info-'));
   try {

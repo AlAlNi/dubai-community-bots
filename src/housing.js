@@ -125,7 +125,7 @@ export function housingFields(item) {
     return [`Искали на ${h.requested_check_in} — ${h.requested_check_out}, ${h.nights} ночей, для 2 взрослых.`,
       `В объявлении указано: «${h.price_text}». Это не подтверждённая итоговая стоимость нашего проживания.`,
       h.dates_confirmed ? 'Цена указана для запрошенных дат.' : 'Применимость цены к запрошенным датам не подтверждена.',
-      h.guests_confirmed ? 'В источнике указаны 2 взрослых, без детей, один номер или апартаменты.' : 'Цена для 2 взрослых не подтверждена.',
+      h.guests_confirmed ? `В источнике указаны 2 взрослых, без детей, ${h.property_type === 'hotel' ? 'один отдельный номер' : 'целые апартаменты'}.` : 'Цена для 2 взрослых не подтверждена.',
       h.all_mandatory_fees_included === true ? 'По данным источника, обязательные сборы включены.'
         : h.all_mandatory_fees_included === false ? 'Есть дополнительные сборы; полный итог нужно уточнить.' : 'Состав и размер дополнительных сборов неизвестны.',
       h.deposit_cents === null ? 'Депозит неизвестен.' : `Указанный возвратный депозит отдельно: ${money(h.deposit_cents)} AED.`,
@@ -136,7 +136,7 @@ export function housingFields(item) {
     || h.deposit_cents < 0 || !Number.isInteger(h.nights) || h.nights < 1
     || (date(h.check_out) - date(h.check_in)) / DAY !== h.nights) throw new Error('Некорректные параметры стоимости или срока жилья');
   const money = n => (n / 100).toFixed(2);
-  return [`Заезд ${h.check_in}, выезд ${h.check_out}; ${h.nights} ночей. 2 взрослых, 1 ${h.property_type === 'hotel' ? 'отдельный номер' : 'целые апартаменты'}.`,
+  return [`Заезд ${h.check_in}, выезд ${h.check_out}; ${h.nights} ночей. 2 взрослых, ${h.property_type === 'hotel' ? 'один отдельный номер' : 'целые апартаменты'}.`,
     `На сайте указано за весь срок: ${money(h.total_cents)} AED. По данным источника, обязательные налоги и сборы включены.`,
     `Указанный возвратный депозит отдельно: ${money(h.deposit_cents)} AED.`,
     `Найдено: ${item.checked_at}. Цена, наличие и заселение не гарантируются. Перед бронированием проверьте итог и условия по ссылке.`];
