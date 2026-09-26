@@ -20,6 +20,27 @@ const offer = { period: 'day', property: 'Учебный отель', property_t
 const research = { text: excerpt, citations: [{ url: offer.source_url }, { url: 'https://example.com/other' }] };
 const convert = offers => housingMaterials({ offers }, research, stay, now, sourceUrl);
 
+test('whole studios render as studios, shared studios are rejected, and warnings stay distinct', () => {
+  const quote = 'Учебная студия целиком в Дубае. Цена: AED 259. Есть дополнительные сборы, депозит, наличие и число гостей не указаны.';
+  const r = { ...research, text: quote };
+  const studio = { ...offer, property_type: 'studio', property: 'Учебная студия',
+    research_excerpt: quote, price_text: 'AED 259', total_aed: null,
+    all_mandatory_fees_included: false, refundable_deposit_aed: null,
+    available: null, guests_confirmed: false, adults: null, children: null, units: null };
+  const result = housingMaterials({ offers: [studio] }, r, stay, now, sourceUrl);
+  assert.equal(result.materials.length, 1);
+  const text = renderPost(result.materials[0], false);
+  assert.match(text, /Дубай · студия целиком/);
+  assert.match(text, /Есть дополнительные сборы/);
+  assert.match(text, /Депозит неизвестен/);
+  assert.match(text, /Наличие на даты не подтверждено/);
+  assert.match(text, /Цена для 2 взрослых не подтверждена/);
+  assert.equal(text.split('Итог для запрошенных дат не подтверждён').length - 1, 1);
+  assert.equal(text.split('Цена может измениться').length - 1, 1);
+  assert.doesNotMatch(text, /нужно проверить|полный итог нужно уточнить|Перед бронированием/);
+  assert.equal(housingMaterials({ offers: [{ ...studio, private_unit: false }] }, r, stay, now, sourceUrl).materials.length, 0);
+});
+
 test('a quoted three-night total cannot become a one-night offer even with confirmed dates', () => {
   for (const price_text of ['US$4,024.81 × 3 nights US$12,074.43', 'Цена за 3 ночи: 900 AED', 'Цена за 3 ночей: 900 AED']) {
     const r = { ...research, text: excerpt + '\n' + price_text };
@@ -37,7 +58,7 @@ test('informational card identifies private accommodation and does not assert co
   const text = renderPost(m, false);
   assert.match(text, /Дубай · целые апартаменты/);
   assert.match(text, /1 ночь, для 2 взрослых/);
-  assert.match(text, /Итог для запрошенных дат нужно проверить/);
+  assert.match(text, /Итог для запрошенных дат не подтверждён/);
   assert.doesNotMatch(text, /Цена указана для запрошенных дат|На сутки:/);
 });
 
@@ -153,7 +174,7 @@ test('informational quote preserves from/night and unknowns without computing a 
   const text = renderPost(r.materials[0], false);
   assert.match(text, /от 150 AED за ночь/);
   assert.match(text, /Депозит неизвестен/);
-  assert.match(text, /Наличие на даты нужно проверить/);
+  assert.match(text, /Наличие на даты не подтверждено/);
   assert.match(text, /Цена для 2 взрослых не подтверждена/);
   assert.doesNotMatch(text, /самая низкая|самый дешёвый|4650|4500/);
 });
