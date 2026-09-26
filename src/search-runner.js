@@ -75,8 +75,7 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
       audit.materials = result.materials;
       if (result.comparisons) {
         report.housing_search = { stay: audit.stay, periods: result.comparisons.map(c => ({
-          ...c, status: c.count ? report.drafts.find(d => d.material.role === 'housing'
-            && d.material.housing?.period === c.period && d.material.housing?.check_in === c.check_in && d.status !== 'expired')?.status ?? 'blocked' : c.status,
+          ...c, status: c.material_id ? report.drafts.find(d => d.material.id === c.material_id && d.status !== 'expired')?.status ?? 'blocked' : c.status,
         })) };
         audit.housing_search = report.housing_search;
       }
@@ -86,7 +85,7 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
       await writeJson(auditPath, audit);
       await writeJson(reportPath, report);
       const preview = ['# Черновики для проверки', '', `Подготовлено: ${now}. Отправка в Telegram отключена.`, '',
-        ...(report.housing_search ? report.housing_search.periods.map(p => `Жильё ${p.period}: ${p.check_in} — ${p.check_out}, ${p.nights} ночей; найдено ${p.count}; ${p.status}.`) : []), '',
+        ...(report.housing_search ? report.housing_search.periods.map(p => `Жильё ${p.period}: ${p.check_in} — ${p.check_out}, ${p.nights} ночей; сравнимых ${p.count}, информационных ${p.informational_count ?? 0}; ${p.status}.`) : []), '',
         ...report.drafts.filter(d => d.status !== 'expired').flatMap(d => [`## ${d.role} — ${d.status}`, '',
           d.review_note ?? 'Требуется проверка редактором.', `Редактура: ${d.style?.status ?? 'disabled'}.`, '',
           ...(d.status === 'blocked' ? [`Заблокировано: ${d.review_reason}. Подробности — в report.json. Исходник не готов к публикации.`]

@@ -15,6 +15,7 @@ const excerpt = 'Вымышленный отель, Дубай: 2 взрослы
 const offer = { period: 'day', property: 'Учебный отель', property_type: 'hotel', city: 'Dubai', location: 'Учебный район',
   check_in: '2026-10-01', check_out: '2026-10-02', adults: 2, children: 0, units: 1, private_unit: true, available: true,
   currency: 'AED', total_aed: 200, all_mandatory_fees_included: true, refundable_deposit_aed: 0,
+  dates_confirmed: true, guests_confirmed: true, price_text: 'Полная цена 200 AED со всеми сборами', price_basis: 'stay',
   cancellation: 'Без возврата', source_name: 'Учебный источник', source_url: 'https://example.com/hotel', research_excerpt: excerpt };
 const research = { text: excerpt, citations: [{ url: offer.source_url }, { url: 'https://example.com/other' }] };
 const convert = offers => housingMaterials({ offers }, research, stay, now, sourceUrl);
@@ -45,9 +46,9 @@ test('one offer is not advertised as cheapest and duplicate source entries do no
   assert.match(result.materials[0].facts[0], /только один/);
   assert.doesNotMatch(result.materials[0].facts[0], /самая низкая|самый дешёвый/i);
 });
-test('unknown fees, deposit, availability, wrong dates, currency or occupancy cannot win', () => {
-  for (const change of [{ all_mandatory_fees_included: false }, { refundable_deposit_aed: null }, { available: false },
-    { total_aed: null }, { total_aed: -1 }, { total_aed: 0 }, { total_aed: 0.001 }, { currency: 'USD' },
+test('unavailable, wrong dates, occupancy, invalid amounts and invented prices are rejected', () => {
+  for (const change of [{ available: false }, { price_text: 'От 100 AED' },
+    { total_aed: -1 }, { total_aed: 0 }, { total_aed: 0.001 },
     { adults: 1 }, { children: 1 }, { units: 2 }, { private_unit: false }, { city: 'Sharjah' },
     { check_out: '2026-10-08' }, { source_url: 'https://example.com/uncited' }, { research_excerpt: 'invented excerpt' }]) {
     const result = convert([{ ...offer, ...change }]);
@@ -64,11 +65,11 @@ test('housing request uses all three exact stays and extraction connects to norm
   assert.equal(result.comparisons.length, 3);
   assert.equal(Date.parse(result.materials[0].expires_at) - Date.parse(now), 3600000);
 });
-function fakeSearch(quality = true) {
+function fakeSearch(quality = true, candidate = offer, researchText = excerpt) {
   const message = text => ({ type: 'message', content: [{ type: 'output_text', text, annotations: [{ type: 'url_citation', url: offer.source_url }] }] });
   const responses = [
-    { status: 'completed', output: [{ type: 'web_search_call', status: 'completed' }, message(excerpt)] },
-    { status: 'completed', output: [message(JSON.stringify({ offers: [offer] }))] },
+    { status: 'completed', output: [{ type: 'web_search_call', status: 'completed' }, message(researchText)] },
+    { status: 'completed', output: [message(JSON.stringify({ offers: [candidate] }))] },
     { status: 'completed', output: [message(JSON.stringify({ source_consistent: quality, supported: quality, complete: true, non_redundant: true, issues: quality ? [] : ['Цена не подтверждена на даты.'] }))] },
   ];
   return async () => { assert.ok(responses.length); return { ok: true, json: async () => responses.shift() }; };
@@ -85,6 +86,54 @@ test('research that asks a question without citations cannot produce offers or c
   assert.equal(result.rejected[0].code, 'research_no_citations');
   assert.equal(result.extraction, null);
   assert.equal(result.comparisons.length, 3);
+});
+
+const partialExcerpt = 'Учебные апартаменты в Дубае, отдельное жильё. На странице указано: от 150 AED за ночь. Сборы, депозит, гости и наличие на даты не указаны.';
+const partial = { ...offer, total_aed: null, all_mandatory_fees_included: null, refundable_deposit_aed: null,
+  check_in: null, check_out: null, adults: null, children: null, units: null, available: null,
+  dates_confirmed: false, guests_confirmed: false, price_text: 'от 150 AED за ночь', price_basis: 'from', cancellation: 'Не указана', research_excerpt: partialExcerpt };
+const partialResearch = { ...research, text: partialExcerpt };
+test('informational quote preserves from/night and unknowns without computing a total', () => {
+  const r = housingMaterials({ offers: [{ ...partial, period: 'month' }] }, partialResearch, stay, now, sourceUrl);
+  assert.equal(r.comparisons[2].count, 0);
+  assert.equal(r.comparisons[2].informational_count, 1);
+  const h = r.materials[0].housing;
+  assert.equal(h.mode, 'informational');
+  assert.equal(h.total_cents, null);
+  assert.equal(h.compared_count, 0);
+  const text = renderPost(r.materials[0], false);
+  assert.match(text, /от 150 AED за ночь/);
+  assert.match(text, /Депозит неизвестен/);
+  assert.match(text, /Наличие на даты нужно проверить/);
+  assert.match(text, /Цена для 2 взрослых не подтверждена/);
+  assert.doesNotMatch(text, /самая низкая|самый дешёвый|4650|4500/);
+});
+test('partial offers never enter full-price ranking or inflate comparison count', () => {
+  const r = housingMaterials({ offers: [partial, offer] }, { ...research, text: excerpt + '\n' + partialExcerpt }, stay, now, sourceUrl);
+  assert.equal(r.comparisons[0].count, 1);
+  assert.equal(r.comparisons[0].informational_count, 1);
+  assert.equal(r.materials[0].housing.mode, 'comparison');
+  assert.equal(r.materials[0].housing.compared_count, 1);
+});
+test('unknown deposit, fees or price basis downgrades to informational rather than a cheap winner', () => {
+  for (const change of [{ refundable_deposit_aed: null }, { all_mandatory_fees_included: null },
+    { all_mandatory_fees_included: false }, { available: null }, { price_basis: 'night' }, { price_basis: 'month' },
+    { price_basis: 'from' }, { dates_confirmed: false }, { guests_confirmed: false }, { currency: 'USD' }]) {
+    const r = convert([{ ...offer, ...change }]);
+    assert.equal(r.materials[0].housing.mode, 'informational');
+    assert.equal(r.comparisons[0].count, 0);
+  }
+});
+test('informational cards still pass through quality checker and report selected draft status', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dubai-info-'));
+  try {
+    const r = await runSearch({ query: 'Жильё', role: 'housing', days: 7, checkIn: '2026-10-01', now,
+      settings, editorial, environment: { name: 'test' }, apiKey: 'test-only', directory, fetchImpl: fakeSearch(true, partial, partialExcerpt) });
+    assert.equal(r.report.housing_search.periods[0].count, 0);
+    assert.equal(r.report.housing_search.periods[0].status, 'needs_review');
+    assert.equal(r.report.drafts[0].style.status, 'checked');
+    assert.match(await readFile(join(directory, 'drafts.md'), 'utf8'), /от 150 AED за ночь/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 test('housing report preserves comparison and gates winning offer through consistency checker', async () => {
   for (const quality of [true, false]) {
