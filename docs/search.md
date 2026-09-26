@@ -37,7 +37,7 @@ node src/search-cli.js --query "Изменения движения в Дуба�
 node --test
 ```
 
-Роли: `guide`, `events`, `transport`, `everyday`. По умолчанию — `guide`, период — 7 дней. `--env production` запрещён на этом этапе.
+Роли: `guide`, `events`, `transport`, `everyday`, `housing`. По умолчанию — `guide`, период — 7 дней. Для `housing` задайте `--check-in YYYY-MM-DD`: сравниваются 1 ночь, 7 ночей и календарный месяц для 2 взрослых; `--days` не задаёт длительность проживания. [Подробности поиска жилья](housing.md). `--env production` запрещён на этом этапе.
 
 ## Что происходит
 

@@ -12,7 +12,12 @@ on:
         required: true
         default: events
         type: choice
-        options: [guide, events, transport, everyday]
+        options: [guide, events, transport, everyday, housing]
+      check_in:
+        description: 'Для housing: заезд YYYY-MM-DD; пусто — завтра по Дубаю. 2 взрослых, 1/7 ночей и месяц.'
+        required: false
+        default: ''
+        type: string
       days:
         description: 'Период поиска, 1–14 дней'
         required: true
@@ -50,7 +55,11 @@ jobs:
           SEARCH_QUERY: ${{ inputs.query }}
           SEARCH_ROLE: ${{ inputs.role }}
           SEARCH_DAYS: ${{ inputs.days }}
-        run: node src/search-cli.js --env test --query "$SEARCH_QUERY" --role "$SEARCH_ROLE" --days "$SEARCH_DAYS" --style "$SEARCH_STYLE"
+          CHECK_IN: ${{ inputs.check_in }}
+        run: |
+          args=()
+          if [ -n "$CHECK_IN" ]; then args+=(--check-in "$CHECK_IN"); fi
+          node src/search-cli.js --env test --query "$SEARCH_QUERY" --role "$SEARCH_ROLE" --days "$SEARCH_DAYS" --style "$SEARCH_STYLE" "${args[@]}"
       - name: Save drafts and research
         if: always()
         uses: actions/upload-artifact@v4

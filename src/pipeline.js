@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
+import { housingFields } from './housing.js';
 
 const voices = {
   guide: ['Гид', 'Полезное место на заметку.'],
   events: ['Афиша', 'Есть идея, куда выбраться.'],
   transport: ['Транспорт', 'Если собираетесь в дорогу, вот что стоит учесть.'],
   everyday: ['Быт', 'Это может пригодиться в повседневных делах.'],
+  housing: ['Жильё', 'Нашёл предложение — вот ссылка.'],
 };
 const text = value => typeof value === 'string' && value.trim().length > 0;
 export function timestamp(value) {
@@ -49,6 +51,10 @@ function fingerprint(item) {
 }
 export function publicationFields(item) {
   const fields = [item.title.trim()];
+  if (item.role === 'housing') {
+    if (!item.housing) throw new Error('Для жилья нужны параметры предложения');
+    fields.push(...housingFields(item));
+  }
   if (item.event_at) {
     timestamp(item.event_at);
     fields.push(`${new Intl.DateTimeFormat('ru-RU', {

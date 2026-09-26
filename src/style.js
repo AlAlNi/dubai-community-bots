@@ -6,6 +6,7 @@ const voices = {
   events: 'Дружелюбная афиша: коротко объясни, что будет на событии. Без навязчивых призывов.',
   transport: 'Практичный помощник: что изменилось и как это влияет на поездку.',
   everyday: 'Помощник по бытовым вопросам: простые действия в понятном порядке.',
+  housing: 'Помощник по жилью: «нашёл предложение, на сайте указана цена, вот ссылка». Ничего не гарантируй: ни цену, ни наличие, ни заселение, ни минимум по всему рынку. Без выдуманного опыта проживания и рекомендаций оплатить.',
 };
 export function styleRequest(material, settings) {
   return { model: settings.model, thinking: { type: 'disabled' }, temperature: 0.2,
@@ -45,12 +46,14 @@ export function verificationRequest(material, candidate, settings) {
 supported=true только если КАЖДОЕ утверждение candidate следует из source; аудитория, оценки, опыт и советы тоже являются утверждениями.
 complete=true только если сохранены все существенные факты source: даты, время начала И окончания, цены, адреса, условия, отрицания и оговорки.
 non_redundant=true только если каждый факт сообщается один раз во всём candidate, включая заголовок, основной текст и готовые блоки. Повтор даты и условий другими словами тоже повтор. Название события в подписи источника не считается повтором. Не удаляй время окончания или оговорку ради краткости.
+Для housing проверь, что выдержки действительно подтверждают точные даты, гостей, наличие, полную цену за срок, сборы и депозит каждого предложения в comparison. Если это лишь «от», тариф за ночь, общая цена без дат или предположение — source_consistent=false. Ранжирование и compared_count вычислены кодом из comparison; не требуй цитаты сайта для результата арифметического сравнения. Нельзя обещать цену, наличие или заселение. Оговорка об изменении цены обязательна; она не оправдывает отсутствие данных.
+Для полноты housing в посте нужны сведения выбранного предложения и оговорки. Остальные предложения comparison служат проверке сравнения; перечислять их все в посте не требуется.
 Открытие дверей, начало шоу и окончание — разные факты, даже если часы совпадают. «Двери в 17:00» и отдельный блок «27 сентября, 18:00» не повтор: первое сообщает открытие дверей, второе — начало. Не считай сам факт наличия нескольких времён повтором.
 Факты можно перенести в заголовок или блок даты/места/условий без повторения. Служебные статусы проверки не являются фактами для публикации.
 Если есть сомнения, ставь false. issues содержит краткие причины; при полном соответствии issues=[].
 Эта проверка не подтверждает истинность самого source.`,
     input: JSON.stringify({ source: { title: material.title, facts: material.facts, event_at: material.event_at ?? null,
-      location: material.location ?? null, conditions: material.conditions ?? null, evidence: material.evidence ?? [], source_name: material.source_name, source_url: material.source_url }, candidate }),
+      location: material.location ?? null, conditions: material.conditions ?? null, housing: material.housing ?? null, evidence: material.evidence ?? [], source_name: material.source_name, source_url: material.source_url }, candidate }),
     text: { format: { type: 'json_schema', name: 'style_verdict', strict: true,
       schema: { type: 'object', additionalProperties: false, required: ['source_consistent', 'supported', 'complete', 'non_redundant', 'issues'],
         properties: { source_consistent: { type: 'boolean' }, non_redundant: { type: 'boolean' }, supported: { type: 'boolean' }, complete: { type: 'boolean' }, issues: { type: 'array', items: { type: 'string' } } } } } },

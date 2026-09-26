@@ -6,6 +6,7 @@ import { prepare } from './pipeline.js';
 import { polishDraft, checkDraft } from './style.js';
 import { checkReportEnvironment } from './environment.js';
 import { readJson, withLock, writeJson, writeText } from './storage.js';
+import { stayPlan } from './housing.js';
 
 const defaultStyleSettings = JSON.parse(await readFile(new URL('../config/style.json', import.meta.url), 'utf8'));
 
@@ -17,10 +18,12 @@ export function reserveRun(ledger, now, limit) {
   return { ledger: { ...ledger, runs: [...ledger.runs, run] }, run };
 }
 export async function runSearch({ query, role, days, settings, editorial, environment, apiKey,
-  style = 'none', styleSettings = defaultStyleSettings, deepseekKey,
+  style = 'none', styleSettings = defaultStyleSettings, deepseekKey, checkIn,
   now = new Date().toISOString(), fetchImpl, directory = resolve(environment.data_directory, 'search') }) {
   if (environment.name !== 'test') throw new Error('Поиск пока доступен только в test');
   validateSearch(query, role, days, settings);
+  if (role === 'housing') stayPlan(checkIn, now);
+  else if (checkIn) throw new Error('Дата заезда применяется только к housing');
   if (!apiKey?.trim()) throw new Error('Не задан TEST_OPENAI_API_KEY');
   if (!['none', 'deepseek'].includes(style)) throw new Error('Неизвестный редактор');
   if (style === 'deepseek' && (!deepseekKey?.trim() || !styleSettings)) throw new Error('Для редактуры нужен TEST_DEEPSEEK_API_KEY и config/style.json');
@@ -35,10 +38,11 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
     const reserved = reserveRun(await readJson(ledgerPath, { version: 1, runs: [] }), now, settings.max_runs_per_day);
     await writeJson(ledgerPath, reserved.ledger); // Failed/ambiguous requests also consume a slot.
     const auditPath = resolve(directory, `${reserved.run.id}.json`);
-    const audit = { run_id: reserved.run.id, environment: 'test', query, role, days, started_at: now, status: 'started' };
+    const audit = { run_id: reserved.run.id, environment: 'test', query, role, days, started_at: now, status: 'started',
+      ...(role === 'housing' ? { stay: stayPlan(checkIn, now) } : {}) };
     try {
       await writeJson(auditPath, audit);
-      const result = await discover({ query, role, days, settings, now, apiKey, fetchImpl,
+      const result = await discover({ query, role, days, settings, now, apiKey, fetchImpl, checkIn,
         onResearch: async research => { audit.research = research; await writeJson(auditPath, audit); } });
       const fresh = prepare([], editorial, previous?.drafts ?? [], now).drafts;
       for (const draft of fresh) {
@@ -69,12 +73,20 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
       report.last_search_run = reserved.run.id;
       audit.extraction = result.extraction;
       audit.materials = result.materials;
+      if (result.comparisons) {
+        report.housing_search = { stay: audit.stay, periods: result.comparisons.map(c => ({
+          ...c, status: c.count ? report.drafts.find(d => d.material.role === 'housing'
+            && d.material.housing?.period === c.period && d.material.housing?.check_in === c.check_in && d.status !== 'expired')?.status ?? 'blocked' : c.status,
+        })) };
+        audit.housing_search = report.housing_search;
+      }
       audit.rejected = report.rejected;
       audit.style = report.drafts.slice(fresh.length).map(d => ({ id: d.material.id, ...(d.style ?? { status: 'disabled' }) }));
       audit.status = 'completed';
       await writeJson(auditPath, audit);
       await writeJson(reportPath, report);
       const preview = ['# Черновики для проверки', '', `Подготовлено: ${now}. Отправка в Telegram отключена.`, '',
+        ...(report.housing_search ? report.housing_search.periods.map(p => `Жильё ${p.period}: ${p.check_in} — ${p.check_out}, ${p.nights} ночей; найдено ${p.count}; ${p.status}.`) : []), '',
         ...report.drafts.filter(d => d.status !== 'expired').flatMap(d => [`## ${d.role} — ${d.status}`, '',
           d.review_note ?? 'Требуется проверка редактором.', `Редактура: ${d.style?.status ?? 'disabled'}.`, '',
           ...(d.status === 'blocked' ? [`Заблокировано: ${d.review_reason}. Подробности — в report.json. Исходник не готов к публикации.`]
