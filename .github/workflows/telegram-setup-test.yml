@@ -1,0 +1,26 @@
+name: Telegram setup (test)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dubai-telegram-test
+  cancel-in-progress: false
+jobs:
+  setup:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run offline tests
+        run: node --test
+      - name: Identify test bot and private group
+        env:
+          TEST_TELEGRAM_HOUSING_BOT_TOKEN: ${{ secrets.TEST_TELEGRAM_HOUSING_BOT_TOKEN }}
+        run: node src/telegram-setup-cli.js
