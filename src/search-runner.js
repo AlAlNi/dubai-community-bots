@@ -70,6 +70,7 @@ export async function runSearch({ query, role, days, settings, editorial, enviro
       report.environment = 'test';
       report.duplicates.push(...duplicates);
       report.rejected.push(...result.rejected);
+      report.search_diagnostics = result.diagnostics ?? [];
       report.last_search_run = reserved.run.id;
       audit.extraction = result.extraction;
       audit.materials = result.materials;

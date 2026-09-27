@@ -16,7 +16,7 @@ export function testPreview(report, role) {
     if (drafts.length > 1) lines.push('Показана первая карточка; остальные — в артефакте запуска.');
   } else {
     lines.push('Карточек нет. Это не означает, что предложений на рынке нет.');
-    const reasons = [...new Set((report.rejected ?? []).map(r => r.reason))];
+    const reasons = [...new Set([...(report.rejected ?? []), ...(report.search_diagnostics ?? [])].map(r => r.reason))];
     lines.push(clip(reasons.join('\n') || 'Исследование не дало данных, пригодных для карточки. Подробности — в артефакте запуска.', 1500));
   }
   return lines.join('\n\n');

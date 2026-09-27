@@ -20,6 +20,15 @@ const offer = { period: 'day', property: 'Учебный отель', property_t
 const research = { text: excerpt, citations: [{ url: offer.source_url }, { url: 'https://example.com/other' }] };
 const convert = offers => housingMaterials({ offers }, research, stay, now, sourceUrl);
 
+test('empty extraction is diagnosed separately from rejected offers', () => {
+  const result = convert([]);
+  assert.equal(result.materials.length, 0);
+  assert.equal(result.rejected.length, 0);
+  assert.equal(result.diagnostics[0].code, 'housing_extraction_empty');
+  const request = researchRequest('Недорогое жильё', 'housing', 7, settings, now);
+  assert.match(request.instructions, /Полный расчёт со всеми сборами НЕ является условием включения/);
+});
+
 test('foreign-currency deposit stays quoted and does not become an unknown or an AED amount', () => {
   const deposit_text = 'Security deposit hold $250 per stay';
   const text = 'Учебные апартаменты в Дубае. Daily: $133. ' + deposit_text;

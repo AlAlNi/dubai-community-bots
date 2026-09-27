@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { testPreview } from '../src/telegram-preview.js';
 const report = { version: 1, environment: 'test', demo: false, drafts: [], rejected: [] };
+test('empty extraction diagnosis reaches Telegram without inflating rejected count', () => {
+  const text = testPreview({ ...report, search_diagnostics: [{ reason: 'Извлечение вернуло пустой список.' }] }, 'housing');
+  assert.match(text, /Извлечение вернуло пустой список/);
+  assert.match(text, /отклонено при извлечении: 0/);
+});
 test('empty search sends the actual rejection reasons instead of silence', () => {
   const text = testPreview({ ...report, rejected: [{ reason: 'Цена не связана с цитатой' }] }, 'housing');
   assert.match(text, /Карточек нет/); assert.match(text, /Цена не связана/);
