@@ -20,6 +20,27 @@ const offer = { period: 'day', property: 'Учебный отель', property_t
 const research = { text: excerpt, citations: [{ url: offer.source_url }, { url: 'https://example.com/other' }] };
 const convert = offers => housingMaterials({ offers }, research, stay, now, sourceUrl);
 
+test('foreign-currency deposit stays quoted and does not become an unknown or an AED amount', () => {
+  const deposit_text = 'Security deposit hold $250 per stay';
+  const text = 'Учебные апартаменты в Дубае. Daily: $133. ' + deposit_text;
+  const r = { ...research, text };
+  const candidate = { ...offer, price_text: 'Daily: $133', price_basis: 'night', currency: 'USD',
+    total_aed: null, all_mandatory_fees_included: null, refundable_deposit_aed: null,
+    deposit_text, fees_text: null, research_excerpt: text };
+  const result = housingMaterials({ offers: [candidate] }, r, stay, now, sourceUrl);
+  const post = renderPost(result.materials[0], false);
+  assert.match(post, /Депозит: «Security deposit hold \$250 per stay»/);
+  assert.doesNotMatch(post.split('Уточнить по ссылке:')[1], /депозит/);
+  assert.match(post, /разбивку налогов и сборов/);
+  assert.doesNotMatch(post, /250.00 AED/);
+  assert.equal(result.comparisons[0].count, 0);
+  assert.equal(result.materials[0].housing.deposit_cents, null);
+  const forged = housingMaterials({ offers: [{ ...candidate, deposit_text: 'No deposit' }] }, r, stay, now, sourceUrl);
+  assert.equal(forged.materials.length, 0);
+  const duplicate = housingMaterials({ offers: [{ ...candidate, fees_text: deposit_text }] }, r, stay, now, sourceUrl);
+  assert.equal(renderPost(duplicate.materials[0], false).split(deposit_text).length - 1, 1);
+});
+
 test('informational totals survive unknown fees, deposit or availability without inventing date applicability', () => {
   const text = 'Учебная студия в Дубае. The current price is AED 154. Итог за весь срок (1 ночь): AED 154. Сборы и депозит не указаны.';
   const r = { ...research, text };
