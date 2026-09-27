@@ -29,14 +29,14 @@ test('informational totals survive unknown fees, deposit or availability without
   const post = renderPost(result.materials[0], false);
   assert.equal(result.materials[0].housing.mode, 'informational');
   assert.equal(result.comparisons[0].count, 0);
-  assert.match(post, /Источник указывает за весь срок: 154.00 AED/);
-  assert.match(post, /Разбивка налогов и сборов отдельно не подтверждена/);
-  assert.match(post, /Депозит неизвестен/);
+  assert.match(post, /За весь срок указано 154.00 AED/);
+  assert.match(post, /разбивку налогов и сборов/);
+  assert.match(post, /депозит/);
   assert.doesNotMatch(post, /Итог для запрошенных дат не подтверждён|Сумма за весь запрошенный срок отдельно не подтверждена/);
   const undated = housingMaterials({ offers: [{ ...candidate, dates_confirmed: false, check_in: null, check_out: null }] }, r, stay, now, sourceUrl);
-  assert.match(renderPost(undated.materials[0], false), /Применимость этой суммы к запрошенным датам не подтверждена/);
+  assert.match(renderPost(undated.materials[0], false), /применимость суммы к датам/);
   const nightlyOnly = housingMaterials({ offers: [{ ...candidate, total_aed: null }] }, r, stay, now, sourceUrl);
-  assert.match(renderPost(nightlyOnly.materials[0], false), /Сумма за весь запрошенный срок отдельно не подтверждена/);
+  assert.match(renderPost(nightlyOnly.materials[0], false), /итог за весь срок/);
 });
 
 test('quoted cancellation and district in property name appear once without dropping extra restrictions', () => {
@@ -50,10 +50,10 @@ test('quoted cancellation and district in property name appear once without drop
   assert.equal(post.split(cancellation).length - 1, 1);
   assert.equal(post.split('Dubai Land').length - 1, 1);
   assert.match(post, /Includes taxes and charges/);
-  assert.match(post, /Разбивка налогов и сборов отдельно не подтверждена/);
+  assert.match(post, /разбивку налогов и сборов/);
   assert.match(renderPost({ ...m, conditions: m.conditions + '; паспорт обязателен' }, false), /паспорт обязателен/);
   assert.match(renderPost({ ...m, location: 'Dubai Land, улица 2' }, false), /Dubai Land, улица 2/);
-  assert.match(renderPost({ ...m, title: 'Учебный объект Dubai Landing' }, false), /\n\nDubai Land\n/);
+  assert.match(renderPost({ ...m, title: 'Учебный объект Dubai Landing' }, false), /\nDubai Land\n/);
   const full = convert([offer]).materials[0];
   full.housing.price_text += ' ' + full.housing.cancellation;
   assert.match(renderPost(full, false), /Отмена: Без возврата/);
@@ -75,7 +75,7 @@ test('tax exclusion and nightly unit retain the exact evidence without invented 
   assert.equal(forged.materials.length, 0);
   assert.match(forged.rejected[0].reason, /дословной цитатой/);
   const withoutQuote = housingMaterials({ offers: [{ ...candidate, fees_text: null }] }, r, stay, now, sourceUrl);
-  assert.match(renderPost(withoutQuote.materials[0], false), /Указан тариф за ночь/);
+  assert.match(renderPost(withoutQuote.materials[0], false), /Тариф за ночь/);
 });
 
 test('whole studios render as studios, shared studios are rejected, and warnings stay distinct', () => {
@@ -90,10 +90,10 @@ test('whole studios render as studios, shared studios are rejected, and warnings
   const text = renderPost(result.materials[0], false);
   assert.match(text, /Дубай · студия целиком/);
   assert.match(text, /Налоги и сборы включены не полностью/);
-  assert.match(text, /Депозит неизвестен/);
-  assert.match(text, /Наличие на даты не подтверждено/);
-  assert.match(text, /Применимость тарифа к этому составу гостей не подтверждена/);
-  assert.equal(text.split('Сумма за весь запрошенный срок отдельно не подтверждена').length - 1, 1);
+  assert.match(text, /депозит/);
+  assert.match(text, /наличие/);
+  assert.match(text, /тариф для выбранных гостей/);
+  assert.equal(text.split('итог за весь срок').length - 1, 1);
   assert.equal(text.split('Цена может измениться').length - 1, 1);
   assert.doesNotMatch(text, /нужно проверить|полный итог нужно уточнить|Перед бронированием/);
   assert.equal(housingMaterials({ offers: [{ ...studio, private_unit: false }] }, r, stay, now, sourceUrl).materials.length, 0);
@@ -116,7 +116,7 @@ test('informational card identifies private accommodation and does not assert co
   const text = renderPost(m, false);
   assert.match(text, /Дубай · целые апартаменты/);
   assert.match(text, /1 ночь, для 2 взрослых/);
-  assert.match(text, /Источник указывает за весь срок: 200.00 AED/);
+  assert.match(text, /За весь срок указано 200.00 AED/);
   assert.doesNotMatch(text, /Цена указана для запрошенных дат|На сутки:/);
 });
 
@@ -231,10 +231,16 @@ test('informational quote preserves from/night and unknowns without computing a 
   assert.equal(h.compared_count, 0);
   const text = renderPost(r.materials[0], false);
   assert.match(text, /от 150 AED за ночь/);
-  assert.match(text, /Депозит неизвестен/);
-  assert.match(text, /Наличие на даты не подтверждено/);
-  assert.match(text, /Применимость тарифа к этому составу гостей не подтверждена/);
+  assert.match(text, /депозит/);
+  assert.match(text, /наличие/);
+  assert.match(text, /тариф для выбранных гостей/);
   assert.doesNotMatch(text, /самая низкая|самый дешёвый|4650|4500/);
+  assert.equal(text.split('Уточнить по ссылке:').length - 1, 1);
+  assert.match(text, /Уточнить по ссылке: итог за весь срок, тариф для выбранных гостей, разбивку налогов и сборов, депозит, наличие, отмену/);
+  assert.doesNotMatch(text, /Найдено:|Отмена: Не указана|Нашёл объявление — вот ссылка/);
+  assert.ok(text.indexOf(partial.price_text) < text.indexOf('Искали на'));
+  assert.ok(text.indexOf(partial.source_url) < text.indexOf('Уточнить по ссылке:'));
+  assert.ok(text.length < 900);
 });
 test('partial offers never enter full-price ranking or inflate comparison count', () => {
   const r = housingMaterials({ offers: [partial, offer] }, { ...research, text: excerpt + '\n' + partialExcerpt }, stay, now, sourceUrl);

@@ -74,7 +74,9 @@ export function publicationFields(item) {
     && typeof cancellation === 'string' && cancellation.trim()
     && item.conditions === `Отмена: ${cancellation}`
     && [item.housing.price_text, item.housing.fees_text].some(s => typeof s === 'string' && s.includes(cancellation));
-  if (item.conditions && !cancellationQuoted) fields.push(item.conditions);
+  const unknownCancellation = item.housing?.mode === 'informational' && item.conditions === `Отмена: ${cancellation}`
+    && /^не указана[.]?$/iu.test(cancellation?.trim() ?? '');
+  if (item.conditions && !cancellationQuoted && !unknownCancellation) fields.push(item.conditions);
   return fields;
 }
 export function renderPost(item, demo, body = item.facts.map(f => f.trim()).join('\n')) {
@@ -90,6 +92,13 @@ export function renderPost(item, demo, body = item.facts.map(f => f.trim()).join
     seen.add(key);
     return true;
   }).join('\n');
+  if (item.role === 'housing' && item.housing.mode === 'informational') {
+    const [context, price, unknown, ...extra] = details;
+    const editorial = uniqueBody === 'Нашёл объявление — вот ссылка.' ? '' : uniqueBody;
+    return [demo ? 'ДЕМО — вымышленные данные, не для публикации.' : null,
+      `${name} · бот\n${title}`, price, editorial, [context, ...extra].join('\n'),
+      `${item.source_name}: ${item.source_url}`, unknown].filter(Boolean).join('\n\n');
+  }
   const lines = [demo ? 'ДЕМО — вымышленные данные, не для публикации.' : null,
     `${name} · бот`, title, uniqueBody, ...details];
   lines.push(`Источник: ${item.source_name}\n${item.source_url}`);

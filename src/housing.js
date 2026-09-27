@@ -159,20 +159,29 @@ export function housingFields(item) {
   const nights = n => `${n} ${n % 100 >= 11 && n % 100 <= 14 ? 'ночей' : n % 10 === 1 ? 'ночь' : n % 10 >= 2 && n % 10 <= 4 ? 'ночи' : 'ночей'}`;
   if (h?.mode === 'informational') {
     const money = n => (n / 100).toFixed(2);
-    return [`Дубай · ${unit}.`,
-      `Искали на ${h.requested_check_in} — ${h.requested_check_out}, ${nights(h.nights)}, для 2 взрослых${h.guests_confirmed ? ' без детей; состав гостей подтверждён источником' : ''}.`,
-      `В объявлении указано: «${h.price_text}».`,
-      ...(Number.isSafeInteger(h.total_cents) && h.total_cents > 0
-        ? [`Источник указывает за весь срок: ${money(h.total_cents)} AED.${h.dates_confirmed ? '' : ' Применимость этой суммы к запрошенным датам не подтверждена.'}`]
-        : ['Сумма за весь запрошенный срок отдельно не подтверждена.']),
-      ...(!h.guests_confirmed ? ['Применимость тарифа к этому составу гостей не подтверждена.'] : []),
-      ...(h.fees_text ? (h.price_text.includes(h.fees_text) ? [] : [`Условия тарифа: «${h.fees_text}».`])
-        : [h.all_mandatory_fees_included === true ? 'По данным источника, обязательные налоги и сборы включены.'
-          : h.all_mandatory_fees_included === false ? 'Налоги и сборы включены не полностью.' : 'Разбивка налогов и сборов отдельно не подтверждена.']),
-      ...(h.price_basis === 'night' && !/night|ноч|сут/iu.test(`${h.price_text} ${h.fees_text ?? ''}`) ? ['Указан тариф за ночь.'] : []),
-      h.deposit_cents === null ? 'Депозит неизвестен.' : `Указанный возвратный депозит отдельно: ${money(h.deposit_cents)} AED.`,
-      h.available === true ? 'По данным источника, вариант доступен на момент поиска.' : 'Наличие на даты не подтверждено.',
-      `Найдено: ${item.checked_at}. Цена может измениться.`];
+    const unknown = [];
+    const price = [`На сайте: «${h.price_text}».`];
+    if (Number.isSafeInteger(h.total_cents) && h.total_cents > 0) {
+      price.push(`За весь срок указано ${money(h.total_cents)} AED.`);
+      if (!h.dates_confirmed) unknown.push('применимость суммы к датам');
+    } else unknown.push('итог за весь срок');
+    if (!h.guests_confirmed) unknown.push('тариф для выбранных гостей');
+    if (h.fees_text) {
+      if (!h.price_text.includes(h.fees_text)) price.push(`Условия: «${h.fees_text}».`);
+    } else if (h.all_mandatory_fees_included === true) price.push('Обязательные налоги и сборы включены.');
+    else if (h.all_mandatory_fees_included === false) price.push('Налоги и сборы включены не полностью.');
+    else unknown.push('разбивку налогов и сборов');
+    if (h.price_basis === 'night' && !/night|ноч|сут/iu.test(`${h.price_text} ${h.fees_text ?? ''}`)) price.push('Тариф за ночь.');
+    if (h.deposit_cents === null) unknown.push('депозит');
+    else price.push(`Возвратный депозит отдельно: ${money(h.deposit_cents)} AED.`);
+    if (h.available !== true) unknown.push('наличие');
+    else price.push('По источнику доступно на момент поиска.');
+    if (/^не указана[.]?$/iu.test(h.cancellation?.trim() ?? '')) unknown.push('отмену');
+    return [
+      `Дубай · ${unit}.\nИскали на ${h.requested_check_in} — ${h.requested_check_out}, ${nights(h.nights)}, для 2 взрослых${h.guests_confirmed ? ' без детей; состав гостей подтверждён источником' : ''}.`,
+      price.join(' '),
+      `${unknown.length ? 'Уточнить по ссылке: ' + unknown.join(', ') + '. ' : ''}Цена может измениться.`,
+    ];
   }
   if (!h || !Number.isSafeInteger(h.total_cents) || h.total_cents <= 0 || !Number.isSafeInteger(h.deposit_cents)
     || h.deposit_cents < 0 || !Number.isInteger(h.nights) || h.nights < 1
