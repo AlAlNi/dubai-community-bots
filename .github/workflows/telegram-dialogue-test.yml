@@ -27,3 +27,11 @@ jobs:
           TEST_TELEGRAM_CHAT_ID: ${{ secrets.TEST_TELEGRAM_CHAT_ID }}
           TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
         run: node src/telegram-dialogue-cli.js
+      - name: Save dialogue transcript (including partial runs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mira-dialogue-${{ github.run_id }}-${{ github.run_attempt }}
+          path: logs/dialogue/
+          if-no-files-found: ignore
+          retention-days: 7
