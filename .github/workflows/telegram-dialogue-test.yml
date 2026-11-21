@@ -1,0 +1,29 @@
+name: Telegram free dialogue (test)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dubai-telegram-test
+  cancel-in-progress: false
+jobs:
+  dialogue:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Five OpenAI turns with Mira
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TEST_TELEGRAM_HOUSING_BOT_TOKEN: ${{ secrets.TEST_TELEGRAM_HOUSING_BOT_TOKEN }}
+          TEST_TELEGRAM_CHAT_ID: ${{ secrets.TEST_TELEGRAM_CHAT_ID }}
+          TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+        run: node src/telegram-dialogue-cli.js

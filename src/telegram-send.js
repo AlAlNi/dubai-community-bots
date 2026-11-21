@@ -51,7 +51,7 @@ export async function sendHousing({ report, draftId, confirmed, token, chatId, j
 }
 
 export async function sendTestText({ token, chatId, journal, fetchImpl = fetch, now = () => Date.now(),
-  text, identity, replyToMessageId, beforeSend = () => {} }) {
+  text, identity, replyToMessageId, includeMessageId = false, beforeSend = () => {} }) {
   if (replyToMessageId !== undefined && (!Number.isSafeInteger(replyToMessageId) || replyToMessageId <= 0)) {
     throw new Error('Некорректный ID сообщения для ответа');
   }
@@ -93,5 +93,5 @@ export async function sendTestText({ token, chatId, journal, fetchImpl = fetch, 
   try {
     await journal.finish(key, { ...record, status: 'sent', sent_at: new Date(now()).toISOString() }, sha);
   } catch { throw new Error('Telegram подтвердил отправку, но запись результата не удалась. Сообщение не повторяйте; резервирование сохранено'); }
-  return { status: 'sent' };
+  return { status: 'sent', ...(includeMessageId ? { messageId: sent.message_id } : {}) };
 }
