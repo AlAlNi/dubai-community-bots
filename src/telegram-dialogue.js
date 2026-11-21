@@ -26,7 +26,7 @@ export function selectDialogueReply(updates, { chatId, botId, parentId, since, n
 }
 
 export async function runDialogue({ token, chatId, apiKey, journal, fetchImpl = fetch,
-  now = () => Date.now(), sleep = delay, progress = () => {} }) {
+  now = () => Date.now(), sleep = delay, progress = () => {}, onTurn = async () => {} }) {
   if (typeof token !== 'string' || !/^\d+:[A-Za-z0-9_-]+$/.test(token)
     || typeof chatId !== 'string' || !/^-[1-9]\d*$/.test(chatId) || !Number.isSafeInteger(Number(chatId))) {
     throw new Error('Проверьте тестовые секреты Telegram');
@@ -84,6 +84,7 @@ export async function runDialogue({ token, chatId, apiKey, journal, fetchImpl = 
     const delivered = await sendTestText({ token, chatId, journal, fetchImpl, now, text,
       identity: `${EXPERIMENT}-turn-${turn}`, replyToMessageId: replyTo, includeMessageId: true });
     sent++;
+    await onTurn({ speaker: 'housing', text, at: new Date(now()).toISOString() });
     progress({ housing_sent: sent, openai_calls: calls });
     history.push({ role: 'assistant', content: text });
     if (turn === LIMIT) break;
@@ -98,6 +99,7 @@ export async function runDialogue({ token, chatId, apiKey, journal, fetchImpl = 
     }
     if (!reply) { stop = 'mira_timeout'; break; }
     replyTo = reply.messageId;
+    await onTurn({ speaker: 'mira', text: reply.text, at: new Date(now()).toISOString() });
     history.push({ role: 'user', content: reply.text });
   }
   await journal.finish(key, { ...record, status: 'finished', housing_sent: sent,

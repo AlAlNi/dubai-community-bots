@@ -112,3 +112,23 @@ test('concurrent starts share the same paid-call budget reservation', async () =
   assert.equal(result.filter(r => r.status === 'fulfilled').length, 1);
   assert.equal(f.requests.filter(r => r.method === 'responses').length, 5);
 });
+
+test('transcript receives nine observed turns in order, without unrelated chat messages', async () => {
+  const f = fixture(), turns = [];
+  f.updates.push({ message: { text: 'PRIVATE unrelated group message', from: { username: 'other' }, chat: { id: -123 } } });
+  await runDialogue({ ...f.args, onTurn: async entry => turns.push(entry) });
+  assert.deepEqual(turns.map(t => t.speaker), ['housing', 'mira', 'housing', 'mira', 'housing', 'mira', 'housing', 'mira', 'housing']);
+  assert.equal(turns[1].text, 'Мысль Миры 100');
+  assert.ok(!JSON.stringify(turns).includes('PRIVATE'));
+  assert.ok(turns.every(t => Number.isFinite(Date.parse(t.at))));
+});
+
+test('transcript retains received Mira reply if the next model request fails', async () => {
+  const f = fixture(), turns = [];
+  await assert.rejects(runDialogue({ ...f.args, onTurn: async entry => {
+    turns.push(entry);
+    if (entry.speaker === 'mira') f.state.failOpenAI = true;
+  } }));
+  assert.deepEqual(turns.map(t => t.speaker), ['housing', 'mira']);
+  assert.equal(f.requests.filter(r => r.method === 'sendMessage').length, 1);
+});
