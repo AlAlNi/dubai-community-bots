@@ -1,0 +1,28 @@
+name: Telegram reply to Mira (test)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dubai-telegram-test
+  cancel-in-progress: false
+jobs:
+  reply:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read Mira reply and send the closing turn once
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TEST_TELEGRAM_HOUSING_BOT_TOKEN: ${{ secrets.TEST_TELEGRAM_HOUSING_BOT_TOKEN }}
+          TEST_TELEGRAM_CHAT_ID: ${{ secrets.TEST_TELEGRAM_CHAT_ID }}
+        run: node src/telegram-mira-cli.js
