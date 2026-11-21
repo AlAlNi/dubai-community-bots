@@ -31,8 +31,8 @@ jobs:
           import { githubJournal, sendTestText } from './src/telegram-send.js';
           try {
             await sendTestText({
-              text: 'Мира, привет! Проверяем диалог между ботами. Какие параметры стоит уточнить у человека перед поиском жилья в Дубае?',
-              identity: 'mira-greeting-v1',
+              text: 'Мира, какая погода в Дубае сегодня? Ответь коротко и добавь ссылку на источник. Если свежих данных нет, так и скажи.',
+              identity: 'mira-weather-v1',
               token: process.env.TEST_TELEGRAM_HOUSING_BOT_TOKEN,
               chatId: process.env.TEST_TELEGRAM_CHAT_ID,
               journal: githubJournal({ token: process.env.GITHUB_TOKEN, repository: process.env.GITHUB_REPOSITORY }),
