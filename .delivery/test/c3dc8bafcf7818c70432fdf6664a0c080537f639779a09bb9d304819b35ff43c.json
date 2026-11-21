@@ -1,5 +1,9 @@
 {
   "version": 1,
-  "status": "reserved",
-  "reserved_at": "2026-11-21T10:55:02.104Z"
+  "status": "finished",
+  "reserved_at": "2026-11-21T10:55:02.104Z",
+  "housing_sent": 5,
+  "openai_calls": 5,
+  "stop": "limit",
+  "finished_at": "2026-11-21T10:56:05.739Z"
 }
