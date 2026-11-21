@@ -1,6 +1,7 @@
 {
   "version": 1,
-  "status": "reserved",
+  "status": "sent",
   "reserved_at": "2026-11-21T10:55:25.826Z",
-  "text_sha256": "e233549d1e0213f5feeb03a17400dc4c093b53095d6dde43cbc7642b00a97e9f"
+  "text_sha256": "e233549d1e0213f5feeb03a17400dc4c093b53095d6dde43cbc7642b00a97e9f",
+  "sent_at": "2026-11-21T10:55:27.019Z"
 }
