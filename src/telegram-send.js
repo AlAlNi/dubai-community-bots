@@ -51,7 +51,10 @@ export async function sendHousing({ report, draftId, confirmed, token, chatId, j
 }
 
 export async function sendTestText({ token, chatId, journal, fetchImpl = fetch, now = () => Date.now(),
-  text, identity, beforeSend = () => {} }) {
+  text, identity, replyToMessageId, beforeSend = () => {} }) {
+  if (replyToMessageId !== undefined && (!Number.isSafeInteger(replyToMessageId) || replyToMessageId <= 0)) {
+    throw new Error('Некорректный ID сообщения для ответа');
+  }
   if (typeof text !== 'string' || !text.trim() || text.length > 4000 || !identity) throw new Error('Некорректное тестовое сообщение');
   if (typeof token !== 'string' || !/^\d+:[A-Za-z0-9_-]+$/.test(token)
     || typeof chatId !== 'string' || !/^-[1-9]\d*$/.test(chatId) || !Number.isSafeInteger(Number(chatId))) {
@@ -82,6 +85,7 @@ export async function sendTestText({ token, chatId, journal, fetchImpl = fetch, 
   const sha = await journal.reserve(key, record);
   beforeSend();
   const sent = await call('sendMessage', { chat_id: chatId, text,
+    ...(replyToMessageId ? { reply_parameters: { message_id: replyToMessageId, allow_sending_without_reply: false } } : {}),
     link_preview_options: { is_disabled: true }, disable_notification: true });
   if (!Number.isSafeInteger(sent?.message_id) || String(sent.chat?.id) !== chatId) {
     throw new Error('Результат отправки не подтверждён; проверьте группу. Резервирование сохранено');
