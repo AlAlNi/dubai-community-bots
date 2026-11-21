@@ -1,5 +1,6 @@
 import { TEST_BOT } from './telegram-setup.js';
 import { sendTestText } from './telegram-send.js';
+import { telegramMessageText } from './telegram-message-text.js';
 
 const question = 'Мира, какая погода в Дубае сегодня? Ответь коротко и добавь ссылку на источник. Если свежих данных нет, так и скажи.';
 
@@ -20,7 +21,7 @@ function replyChecks(m, chatId, botId, now) {
     original_message: !!m && !m.forward_origin && !m.sender_chat && !parent?.forward_origin,
     valid_message_id: Number.isSafeInteger(m?.message_id) && m.message_id > 0,
     fresh_message: Number.isInteger(m?.date) && m.date * 1000 >= now - 24 * 3600000 && m.date * 1000 <= now + 60000,
-    text_message: typeof m?.text === 'string' && !!m.text.trim() && m.text.length <= 4096,
+    text_message: telegramMessageText(m) !== undefined,
     reply_to_housing: parent?.from?.id === botId && parent?.from?.is_bot === true,
     exact_weather_question: parent?.text === question,
     parent_same_chat: String(parent?.chat?.id) === chatId,
@@ -112,5 +113,5 @@ export async function replyToMira({ token, chatId, journal, fetchImpl = fetch, n
   if (!reply) return { status: 'waiting' };
   // One closing turn for this entire test, regardless of reply ID or workflow rerun.
   return sendTestText({ token, chatId, journal, fetchImpl, now,
-    text: closingReply(reply.text), identity: 'mira-weather-v1-closing', replyToMessageId: reply.message_id });
+    text: closingReply(telegramMessageText(reply)), identity: 'mira-weather-v1-closing', replyToMessageId: reply.message_id });
 }

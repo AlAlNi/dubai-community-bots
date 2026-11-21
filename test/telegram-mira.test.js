@@ -137,3 +137,26 @@ test('diagnostics identify missing text and rich content without printing it', (
   assert.ok(!JSON.stringify(result).includes('PRIVATE'));
   assert.equal(findMiraReply([{ message: rich }], '-123', 7, time), undefined);
 });
+
+test('rich weather reply passes selection and sends the matching closing turn exactly once', async () => {
+  const f = fixture();
+  const m = f.results.getUpdates[0].message;
+  delete m.text;
+  m.rich_message = { blocks: [
+    { type: 'paragraph', text: ['Свежих данных прямо сейчас нет — ', { type: 'bold', text: 'у меня нет доступа' }, ' к погоде в реальном времени.'] },
+    { type: 'list', items: [{ label: '•', blocks: [{ type: 'paragraph', text: { type: 'url', text: 'Прогноз', url: 'https://example.com' } }] }] },
+  ] };
+  const earlier = structuredClone(m);
+  earlier.message_id = 18;
+  earlier.reply_to_message.message_id = 17;
+  earlier.reply_to_message.text = 'Предыдущий вопрос про жильё';
+  f.results.getUpdates.unshift({ message: earlier });
+  const diagnostics = [];
+  await replyToMira({ ...f.args, onDiagnostic: value => diagnostics.push(value) });
+  assert.equal(diagnostics[1].matches, 1);
+  const sent = f.calls.find(c => c.method === 'sendMessage').body;
+  assert.equal(sent.reply_parameters.message_id, 20);
+  assert.match(sent.text, /с прогулкой пока не определились/);
+  await assert.rejects(replyToMira(f.args), /duplicate/);
+  assert.equal(f.calls.filter(c => c.method === 'sendMessage').length, 1);
+});
