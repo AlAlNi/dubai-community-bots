@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { closingReply, findMiraReply, replyToMira } from '../src/telegram-mira.js';
+import { closingReply, diagnoseMiraUpdates, findMiraReply, replyToMira } from '../src/telegram-mira.js';
 import { TEST_BOT } from '../src/telegram-setup.js';
 
 const time = Date.parse('2026-11-21T10:00:00Z');
@@ -80,4 +80,45 @@ test('reply text is never treated as instructions or copied into the outgoing me
     assert.ok(!reply.includes('?'));
     assert.ok(reply.length < 180);
   }
+});
+
+test('diagnostic mode never reserves or sends even with a matching reply', async () => {
+  const f = fixture(), diagnostics = [];
+  assert.deepEqual(await replyToMira({ ...f.args, diagnosticOnly: true,
+    onDiagnostic: value => diagnostics.push(value) }), { status: 'diagnostic' });
+  assert.equal(diagnostics[1].matches, 1);
+  assert.equal(f.records.size, 0);
+  assert.ok(!f.calls.some(c => c.method === 'sendMessage'));
+  const output = JSON.stringify(diagnostics);
+  for (const privateValue of [f.args.token, f.args.chatId, message().text, message().reply_to_message.text]) {
+    assert.ok(!output.includes(privateValue));
+  }
+});
+
+test('diagnostics distinguish empty queue, different chat, via bot and broken reply relation', () => {
+  assert.equal(diagnoseMiraUpdates([], '-123', 7, time).updates, 0);
+  const via = message(); via.from.username = 'private-user'; via.via_bot = { username: 'mira' };
+  const broken = message(); delete broken.reply_to_message;
+  const otherChat = message(); otherChat.chat.id = -456;
+  const result = diagnoseMiraUpdates([{ message: via }, { message: broken },
+    { message: otherChat }, { edited_message: message() }], '-123', 7, time);
+  assert.equal(result.target_chat_messages, 2);
+  assert.equal(result.mira_sender_messages, 1);
+  assert.equal(result.via_mira_messages, 1);
+  assert.equal(result.other_updates, 1);
+  assert.equal(result.rejected_checks_in_target_chat.mira_sender, 1);
+  assert.equal(result.rejected_checks_in_target_chat.reply_to_housing, 1);
+  assert.equal(result.matches, 0);
+  assert.ok(!JSON.stringify(result).includes('private-user'));
+});
+
+test('webhook diagnostic contains only state, never its URL', async () => {
+  const f = fixture(), diagnostics = [];
+  f.results.getWebhookInfo = { url: 'https://private.example/secret', pending_update_count: 3 };
+  await assert.rejects(replyToMira({ ...f.args, diagnosticOnly: true,
+    onDiagnostic: value => diagnostics.push(value) }), /webhook/);
+  assert.equal(diagnostics[0].webhook_active, true);
+  assert.equal(diagnostics[0].pending_update_count, 3);
+  assert.ok(!JSON.stringify(diagnostics).includes('private.example'));
+  assert.ok(!f.calls.some(c => c.method === 'getUpdates'));
 });

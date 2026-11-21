@@ -1,6 +1,11 @@
 name: Telegram reply to Mira (test)
 on:
   workflow_dispatch:
+    inputs:
+      diagnostic_only:
+        description: 'Только диагностика, без отправки сообщений'
+        type: boolean
+        default: true
 permissions:
   contents: read
 concurrency:
@@ -25,4 +30,5 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           TEST_TELEGRAM_HOUSING_BOT_TOKEN: ${{ secrets.TEST_TELEGRAM_HOUSING_BOT_TOKEN }}
           TEST_TELEGRAM_CHAT_ID: ${{ secrets.TEST_TELEGRAM_CHAT_ID }}
+          TEST_MIRA_DIAGNOSTIC_ONLY: ${{ inputs.diagnostic_only }}
         run: node src/telegram-mira-cli.js

@@ -9,11 +9,15 @@ try {
   const result = await replyToMira({
     token: process.env.TEST_TELEGRAM_HOUSING_BOT_TOKEN,
     chatId: process.env.TEST_TELEGRAM_CHAT_ID,
+    diagnosticOnly: process.env.TEST_MIRA_DIAGNOSTIC_ONLY === 'true',
+    onDiagnostic: data => console.log('MIRA_DIAGNOSTIC ' + JSON.stringify(data)),
     journal: githubJournal({ token: process.env.GITHUB_TOKEN, repository: process.env.GITHUB_REPOSITORY }),
   });
   const message = result.status === 'sent'
     ? 'Третья реплика отправлена. Жильё завершило диалог и больше не отвечает в этом тесте.'
-    : 'Ответ @mira на вопрос о погоде не найден. Ничего не отправлено. Проверьте доступ бота к ответам и повторите запуск после ответа Миры. Старые или уже полученные другим процессом сообщения могут быть недоступны.';
+    : result.status === 'diagnostic'
+      ? 'Диагностика завершена без отправки. Счётчики и причины фильтрации — в строках MIRA_DIAGNOSTIC журнала шага.'
+      : 'Ответ @mira на вопрос о погоде не найден. Ничего не отправлено. Причины фильтрации — в строках MIRA_DIAGNOSTIC журнала шага.';
   console.log(message);
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, message + '\n');
 } catch (error) {
