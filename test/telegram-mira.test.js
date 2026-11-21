@@ -122,3 +122,18 @@ test('webhook diagnostic contains only state, never its URL', async () => {
   assert.ok(!JSON.stringify(diagnostics).includes('private.example'));
   assert.ok(!f.calls.some(c => c.method === 'getUpdates'));
 });
+
+test('diagnostics identify missing text and rich content without printing it', () => {
+  const rich = message();
+  delete rich.text;
+  rich.rich_message = { blocks: [{ type: 'paragraph', text: { type: 'plain', text: 'PRIVATE_CONTENT' } }] };
+  const caption = { ...message(), text: undefined, caption: 'PRIVATE_CAPTION', photo: [{}] };
+  const updates = [rich, caption, { ...message(), text: ' ' }, { ...message(), text: 'x'.repeat(4097) },
+    { ...message(), text: {} }, message()].map(message => ({ message }));
+  const result = diagnoseMiraUpdates(updates, '-123', 7, time);
+  assert.deepEqual(result.mira_content, { text_missing: 2, text_not_string: 1, text_empty: 1,
+    text_too_long: 1, text_usable: 1, caption_present: 1, rich_message_present: 1,
+    rich_blocks_array: 1, photo_present: 1, document_present: 0 });
+  assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+  assert.equal(findMiraReply([{ message: rich }], '-123', 7, time), undefined);
+});

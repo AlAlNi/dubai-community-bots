@@ -33,7 +33,11 @@ export function diagnoseMiraUpdates(updates, chatId, botId, now) {
   const counts = { updates: updates.length, queue_full: updates.length >= 100,
     ordinary_messages: 0, other_updates: 0, target_chat_messages: 0,
     mira_sender_messages: 0, via_mira_messages: 0, replies_to_housing: 0, matches: 0,
-    rejected_checks_in_target_chat: {} };
+    rejected_checks_in_target_chat: {}, mira_content: {
+      text_missing: 0, text_not_string: 0, text_empty: 0, text_too_long: 0,
+      text_usable: 0, caption_present: 0, rich_message_present: 0,
+      rich_blocks_array: 0, photo_present: 0, document_present: 0,
+    } };
   for (const u of updates) {
     const m = u?.message;
     if (!m) { counts.other_updates++; continue; }
@@ -41,7 +45,20 @@ export function diagnoseMiraUpdates(updates, chatId, botId, now) {
     const checks = replyChecks(m, chatId, botId, now);
     if (!checks.target_chat) continue;
     counts.target_chat_messages++;
-    if (checks.mira_sender) counts.mira_sender_messages++;
+    if (checks.mira_sender) {
+      counts.mira_sender_messages++;
+      const content = counts.mira_content;
+      if (m.text === undefined || m.text === null) content.text_missing++;
+      else if (typeof m.text !== 'string') content.text_not_string++;
+      else if (!m.text.trim()) content.text_empty++;
+      else if (m.text.length > 4096) content.text_too_long++;
+      else content.text_usable++;
+      if (typeof m.caption === 'string' && m.caption.trim()) content.caption_present++;
+      if (m.rich_message && typeof m.rich_message === 'object') content.rich_message_present++;
+      if (Array.isArray(m.rich_message?.blocks)) content.rich_blocks_array++;
+      if (Array.isArray(m.photo)) content.photo_present++;
+      if (m.document && typeof m.document === 'object') content.document_present++;
+    }
     if (m.via_bot?.username?.toLowerCase() === 'mira') counts.via_mira_messages++;
     if (checks.reply_to_housing) counts.replies_to_housing++;
     if (Object.values(checks).every(Boolean)) counts.matches++;
