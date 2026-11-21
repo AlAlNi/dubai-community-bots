@@ -6,11 +6,12 @@ import { createDialogueTranscript } from './dialogue-transcript.js';
 let transcript;
 try {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_REF !== 'refs/heads/develop') {
-    throw new Error('Запустите Telegram free dialogue (test) из develop');
+    throw new Error('Запустите тестовый диалог из develop');
   }
   transcript = await createDialogueTranscript('logs/dialogue', [process.env.TEST_OPENAI_API_KEY,
     process.env.TEST_TELEGRAM_HOUSING_BOT_TOKEN, process.env.TEST_TELEGRAM_CHAT_ID, process.env.GITHUB_TOKEN]);
   const result = await runDialogue({
+    mode: process.env.TEST_DIALOGUE_MODE || 'free',
     token: process.env.TEST_TELEGRAM_HOUSING_BOT_TOKEN,
     chatId: process.env.TEST_TELEGRAM_CHAT_ID,
     apiKey: process.env.TEST_OPENAI_API_KEY,

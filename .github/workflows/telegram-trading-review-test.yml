@@ -1,0 +1,38 @@
+name: Telegram trading review with Mira (test)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dubai-telegram-test
+  cancel-in-progress: false
+jobs:
+  review:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Ask Mira about trades and assess her answers
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TEST_TELEGRAM_HOUSING_BOT_TOKEN: ${{ secrets.TEST_TELEGRAM_HOUSING_BOT_TOKEN }}
+          TEST_TELEGRAM_CHAT_ID: ${{ secrets.TEST_TELEGRAM_CHAT_ID }}
+          TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+          TEST_DIALOGUE_MODE: trading-review
+        run: node src/telegram-dialogue-cli.js
+      - name: Save discussion and assessment
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mira-trading-review-${{ github.run_id }}-${{ github.run_attempt }}
+          path: logs/dialogue/
+          if-no-files-found: ignore
+          retention-days: 7

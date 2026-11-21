@@ -4,8 +4,8 @@ import { createResponse, responseText } from './openai.js';
 import { TEST_BOT } from './telegram-setup.js';
 import { sendTestText } from './telegram-send.js';
 import { telegramMessageText } from './telegram-message-text.js';
+import { tradingReviewOpening, tradingReviewInstructions } from './trading-review-prompt.js';
 
-const EXPERIMENT = 'mira-open-dialog-v1';
 const LIMIT = 5;
 
 export function selectDialogueReply(updates, { chatId, botId, parentId, since, now }) {
@@ -26,7 +26,9 @@ export function selectDialogueReply(updates, { chatId, botId, parentId, since, n
 }
 
 export async function runDialogue({ token, chatId, apiKey, journal, fetchImpl = fetch,
-  now = () => Date.now(), sleep = delay, progress = () => {}, onTurn = async () => {} }) {
+  now = () => Date.now(), sleep = delay, progress = () => {}, onTurn = async () => {}, mode = 'free' }) {
+  if (!['free', 'trading-review'].includes(mode)) throw new Error('Неизвестный сценарий диалога');
+  const experiment = mode === 'trading-review' ? 'mira-trading-review-v1' : 'mira-open-dialog-v1';
   if (typeof token !== 'string' || !/^\d+:[A-Za-z0-9_-]+$/.test(token)
     || typeof chatId !== 'string' || !/^-[1-9]\d*$/.test(chatId) || !Number.isSafeInteger(Number(chatId))) {
     throw new Error('Проверьте тестовые секреты Telegram');
@@ -57,18 +59,19 @@ export async function runDialogue({ token, chatId, apiKey, journal, fetchImpl = 
 
   // Fixed, durable reservation BEFORE the first paid request. Even a new workflow
   // run cannot reset the five-call budget; ambiguous failures are not resumed.
-  const key = createHash('sha256').update(`${TEST_BOT}\n${chatId}\n${EXPERIMENT}\nsession`).digest('hex');
+  const key = createHash('sha256').update(`${TEST_BOT}\n${chatId}\n${experiment}\nsession`).digest('hex');
   const started = now();
   const record = { version: 1, status: 'reserved', reserved_at: new Date(started).toISOString() };
   const sha = await journal.reserve(key, record);
-  const history = [{ role: 'user', content: 'Начни новый разговор с Мирой: выбери интересную свободную тему и задай один небанальный вопрос. Обратись к ней по имени.' }];
+  const history = [{ role: 'user', content: mode === 'trading-review' ? tradingReviewOpening
+    : 'Начни новый разговор с Мирой: выбери интересную свободную тему и задай один небанальный вопрос. Обратись к ней по имени.' }];
   let sent = 0, calls = 0, replyTo;
   let stop = 'limit';
   for (let turn = 1; turn <= LIMIT; turn++) {
     if (now() - started >= 8 * 60000) { stop = 'timeout'; break; }
     calls++;
     const response = await createResponse({ model: 'gpt-4.1-mini', max_output_tokens: 400,
-      instructions: 'Ты бот «Жильё», беседуешь с ботом Мирой в закрытой тестовой группе. ' +
+      instructions: mode === 'trading-review' ? tradingReviewInstructions(turn) : 'Ты бот «Жильё», беседуешь с ботом Мирой в закрытой тестовой группе. ' +
         'Пиши по-русски естественно: 1–3 коротких предложения, до 400 символов, без заголовков и списков. ' +
         'Развивай конкретную мысль собеседницы, не повторяй её ответ и не начинай каждый раз со «спасибо». ' +
         'Тема свободная: идеи, повседневность, воображаемые ситуации. Не выдумывай личный опыт, свежие факты или источники. ' +
@@ -77,12 +80,14 @@ export async function runDialogue({ token, chatId, apiKey, journal, fetchImpl = 
         (turn === LIMIT ? 'Это твоя последняя реплика: естественно заверши мысль, без вопроса и приглашения продолжать.' : 'Можно задать один короткий вопрос по теме.'),
       input: history,
     }, { apiKey, timeoutMs: 45000, fetchImpl });
-    const text = responseText(response).trim();
-    if (!text || text.length > 700) throw new Error('OpenAI вернул слишком длинную реплику; повторного платного запроса не будет');
+    const generated = responseText(response).trim();
+    if (!generated || generated.length > 700) throw new Error('OpenAI вернул слишком длинную реплику; повторного платного запроса не будет');
+    const text = mode === 'trading-review' && turn === LIMIT
+      ? 'Оценка ответов Миры — без независимой проверки сделок.\n\n' + generated : generated;
     if (now() - started >= 8 * 60000) { stop = 'timeout'; break; }
     const sentAt = now();
     const delivered = await sendTestText({ token, chatId, journal, fetchImpl, now, text,
-      identity: `${EXPERIMENT}-turn-${turn}`, replyToMessageId: replyTo, includeMessageId: true });
+      identity: `${experiment}-turn-${turn}`, replyToMessageId: replyTo, includeMessageId: true });
     sent++;
     await onTurn({ speaker: 'housing', text, at: new Date(now()).toISOString() });
     progress({ housing_sent: sent, openai_calls: calls });

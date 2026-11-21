@@ -132,3 +132,41 @@ test('transcript retains received Mira reply if the next model request fails', a
   assert.deepEqual(turns.map(t => t.speaker), ['housing', 'mira']);
   assert.equal(f.requests.filter(r => r.method === 'sendMessage').length, 1);
 });
+
+test('trading interview uses real replies and ends with explicitly unverified assessment', async () => {
+  const f = fixture(), turns = [];
+  f.state.output = 'Данных недостаточно для оценки результата.';
+  const result = await runDialogue({ ...f.args, mode: 'trading-review', onTurn: async entry => turns.push(entry) });
+  assert.equal(result.openaiCalls, 5);
+  assert.equal(result.housingSent, 5);
+  const requests = f.requests.filter(r => r.method === 'responses');
+  assert.match(requests[0].body.input[0].content, /реальных сделках/);
+  assert.ok(requests[1].body.input.some(m => m.content === 'Мысль Миры 100'));
+  assert.match(requests[4].body.instructions, /последняя реплика/);
+  for (const request of requests) {
+    assert.match(request.body.instructions, /непроверенные заявления/);
+    assert.match(request.body.instructions, /Никогда не проси seed-фразу/);
+    assert.equal(request.body.tools, undefined);
+  }
+  assert.match(turns.at(-1).text, /^Оценка ответов Миры — без независимой проверки сделок\./);
+  assert.equal(turns.length, 9);
+  assert.ok(f.requests.every(r => ['responses', 'getMe', 'getChat', 'getWebhookInfo', 'getUpdates', 'sendMessage'].includes(r.method)));
+  await assert.rejects(runDialogue({ ...f.args, mode: 'trading-review' }), /duplicate/);
+  assert.equal(f.requests.filter(r => r.method === 'responses').length, 5);
+});
+
+test('trading review has a separate fixed reservation without resetting the finished free dialogue', async () => {
+  const f = fixture();
+  await runDialogue(f.args);
+  await runDialogue({ ...f.args, mode: 'trading-review' });
+  assert.equal(f.requests.filter(r => r.method === 'responses').length, 10);
+  await assert.rejects(runDialogue(f.args), /duplicate/);
+  await assert.rejects(runDialogue({ ...f.args, mode: 'trading-review' }), /duplicate/);
+  assert.equal(f.requests.filter(r => r.method === 'responses').length, 10);
+});
+
+test('unknown dialogue modes cannot create new budgets or make network requests', async () => {
+  const f = fixture();
+  await assert.rejects(runDialogue({ ...f.args, mode: 'new-experiment' }), /Неизвестный/);
+  assert.equal(f.requests.length, 0);
+});
