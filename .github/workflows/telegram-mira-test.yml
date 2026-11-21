@@ -1,0 +1,47 @@
+name: Telegram message to Mira (test)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dubai-telegram-test
+  cancel-in-progress: false
+jobs:
+  send:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Send the agreed message to the private test group
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TEST_TELEGRAM_HOUSING_BOT_TOKEN: ${{ secrets.TEST_TELEGRAM_HOUSING_BOT_TOKEN }}
+          TEST_TELEGRAM_CHAT_ID: ${{ secrets.TEST_TELEGRAM_CHAT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFile } from 'node:fs/promises';
+          import { githubJournal, sendTestText } from './src/telegram-send.js';
+          try {
+            await sendTestText({
+              text: 'Мира, привет! Проверяем диалог между ботами. Какие параметры стоит уточнить у человека перед поиском жилья в Дубае?',
+              identity: 'mira-greeting-v1',
+              token: process.env.TEST_TELEGRAM_HOUSING_BOT_TOKEN,
+              chatId: process.env.TEST_TELEGRAM_CHAT_ID,
+              journal: githubJournal({ token: process.env.GITHUB_TOKEN, repository: process.env.GITHUB_REPOSITORY }),
+            });
+            await appendFile(process.env.GITHUB_STEP_SUMMARY,
+              'Сообщение Мире отправлено от бота «Жильё» в закрытую тестовую группу. Ответ Миры проверьте в Telegram.\n');
+            console.log('Сообщение отправлено.');
+          } catch (error) {
+            console.error(error.message);
+            process.exitCode = 1;
+          }
+          NODE
